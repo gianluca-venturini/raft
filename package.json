@@ -21,7 +21,7 @@
   "scripts": {
     "lint": "eslint",
     "build": "node esbuild.cjs",
-    "build-raft": "cd raft_server && wasm-pack build --target bundler",
+    "build-raft": "cd raft_server && cargo build && wasm-pack build --target bundler",
     "start": "node dist/bundle.js",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write"
   }
