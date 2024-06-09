@@ -1,4 +1,4 @@
-import { greet } from '../raft_server/pkg';
+import { greet } from '../raft/pkg/raft_server';
 
 console.log('test');
 console.log('test');
