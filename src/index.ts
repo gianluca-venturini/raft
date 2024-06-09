@@ -1,6 +1,10 @@
+import { greet } from '../raft_server/pkg';
+
 console.log('test');
 console.log('test');
 
-function a() {
-    return 1 === 1;
+async function run() {
+    console.log(greet('World'));
 }
+
+run();
