@@ -34,12 +34,28 @@ struct StateMachine {
     vars: std::collections::HashMap<String, i32>,
 }
 
+#[derive(PartialEq, Debug)]
+enum Role {
+    Follower,
+    Candidate,
+    Leader,
+}
+
+impl Default for Role {
+    fn default() -> Self {
+        Role::Follower
+    }
+}
+
 #[derive(Default)]
 pub struct State {
     persisted: PersistedState,
     volatile: VolatileState,
     volatile_leader: Option<VolatileLeaderState>,
     state_machine: StateMachine,
+    // State about the current machine
+    pub role: Role,
+    pub last_received_heartbeat_timestamp_us: u128,
 }
 
 pub fn init_state() -> Arc<RwLock<State>> {
@@ -57,5 +73,6 @@ mod tests {
         assert_eq!(state_guard.volatile.commit_index, 0);
         assert_eq!(state_guard.volatile.last_applied, 0);
         assert_eq!(state_guard.state_machine.vars.len(), 0);
+        assert_eq!(state_guard.role, Role::Follower);
     }
 }
