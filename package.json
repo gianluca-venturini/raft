@@ -20,10 +20,14 @@
   },
   "scripts": {
     "lint": "eslint",
-    "build": "yarn build-raft && yarn build-esbuild",
+    "build": "yarn build-raft-lib && yarn build-esbuild",
     "build-esbuild": "node esbuild.cjs",
-    "build-raft": "cd raft && cargo build && wasm-pack build --target bundler",
+    "build-raft-lib": "cd raft && cargo build && wasm-pack build --target bundler",
+    "build-raft-server": "cd raft && cargo build --bin server",
+    "build-raft-client": "cd raft && cargo build --bin client",
     "start": "node dist/bundle.js",
+    "start-raft-server": "./raft/target/debug/server",
+    "start-raft-client": "./raft/target/debug/client",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write"
   }
 }

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package raft;
+
+service Raft {
+  rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse);
+}
+
+message AppendEntriesRequest {
+  uint32 term = 1;
+}
+
+message AppendEntriesResponse {
+  uint32 term = 1;
+  bool success = 2;
+}
