@@ -28,6 +28,7 @@
     "start": "node dist/bundle.js",
     "start-raft-server": "./raft/target/debug/server",
     "start-raft-client": "./raft/target/debug/client",
-    "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write"
+    "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write",
+    "test-raft": "cd raft && cargo test"
   }
 }

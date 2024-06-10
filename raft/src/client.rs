@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.append_entries(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("response={:?}", response);
 
     Ok(())
 }
