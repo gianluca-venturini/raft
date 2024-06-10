@@ -23,11 +23,9 @@
     "build": "yarn build-raft-lib && yarn build-esbuild",
     "build-esbuild": "node esbuild.cjs",
     "build-raft-lib": "cd raft && cargo build && wasm-pack build --target bundler",
-    "build-raft-server": "cd raft && cargo build --bin server",
-    "build-raft-client": "cd raft && cargo build --bin client",
+    "build-raft-server": "cd raft && cargo build --bin raft_server",
     "start": "node dist/bundle.js",
-    "start-raft-server": "./raft/target/debug/server",
-    "start-raft-client": "./raft/target/debug/client",
+    "start-raft-server": "./raft/target/debug/raft_server",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write",
     "test-raft": "cd raft && cargo test"
   }

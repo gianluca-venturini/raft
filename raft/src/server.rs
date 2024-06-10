@@ -1,13 +1,18 @@
 use tonic::{transport::Server, Request, Response, Status};
 use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
+use std::sync::{Arc, RwLock};
+
+use crate::state;
 
 pub mod raft {
     tonic::include_proto!("raft");
 }
 
 #[derive(Default)]
-pub struct MyRaft {}
+pub struct MyRaft {
+    state: Arc<RwLock<state::State>>,
+}
 
 #[tonic::async_trait]
 impl Raft for MyRaft {
@@ -25,10 +30,9 @@ impl Raft for MyRaft {
     }
 }
 
-#[tokio::main]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_server(state: Arc<RwLock<state::State>>) -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
-    let raft = MyRaft::default();
+    let raft = MyRaft { state: state };
 
     Server::builder()
         .add_service(RaftServer::new(raft))
