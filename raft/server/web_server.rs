@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
+use std::env;
 use std::sync::{Arc, RwLock};
 
 use crate::state;
@@ -26,6 +27,7 @@ async fn set_variable(state: web::Data<Arc<RwLock<state::State>>>) -> HttpRespon
 pub async fn start_web_server(
     state: Arc<RwLock<state::State>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let port = env::var("PORT").expect("PORT environment variable is not set or cannot be read");
     let server = HttpServer::new(move || {
         let state = state.clone();
         App::new()
@@ -33,7 +35,7 @@ pub async fn start_web_server(
             .route("/variable", web::get().to(get_variable))
             .route("/variable", web::post().to(set_variable))
     })
-    .bind("127.0.0.1:8080")?
+    .bind(format!("127.0.0.1:{}", port))?
     .run();
 
     let send_future = async move { server.await };
