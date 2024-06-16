@@ -12,3 +12,9 @@ Build the project
 ```
 yarn build
 ```
+
+# Learnings
+- Raft protocol implementation
+- Improve Rust skills
+- Structure a Rust project with multiple targets (WASM library, other binaries)
+- Use gRPC in Rust
