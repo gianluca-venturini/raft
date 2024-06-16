@@ -1,9 +1,11 @@
 use std::sync::{Arc, RwLock};
+use tokio::task;
 use tokio::time::{interval, Duration};
 
 mod server;
 mod state;
 mod util;
+mod web_server;
 
 /** Periodically transition the server role. */
 fn spawn_timer(state: Arc<RwLock<state::State>>) {
@@ -25,5 +27,8 @@ fn spawn_timer(state: Arc<RwLock<state::State>>) {
 async fn main() {
     let state = state::init_state();
     spawn_timer(state.clone());
-    server::start_server(state.clone()).await.unwrap();
+    let rpc_server = task::spawn(server::start_rpc_server(state.clone()));
+    let web_server = task::spawn(web_server::start_web_server(state.clone()));
+
+    let _ = tokio::try_join!(rpc_server, web_server);
 }

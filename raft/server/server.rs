@@ -40,9 +40,9 @@ impl Raft for MyRaft {
     }
 }
 
-pub async fn start_server(
+pub async fn start_rpc_server(
     state: Arc<RwLock<state::State>>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = "[::1]:50051".parse().unwrap();
     let raft = MyRaft { state: state };
 

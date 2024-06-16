@@ -30,8 +30,8 @@ struct VolatileLeaderState {
 }
 
 #[derive(Default)]
-struct StateMachine {
-    vars: std::collections::HashMap<String, i32>,
+pub struct StateMachine {
+    pub vars: std::collections::HashMap<String, i32>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -52,7 +52,7 @@ pub struct State {
     persisted: PersistedState,
     volatile: VolatileState,
     volatile_leader: Option<VolatileLeaderState>,
-    state_machine: StateMachine,
+    pub state_machine: StateMachine,
     // State about the current machine
     pub role: Role,
     pub last_received_heartbeat_timestamp_us: u128,
@@ -64,7 +64,7 @@ pub fn init_state() -> Arc<RwLock<State>> {
 
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_init_state_empty() {
         let state = init_state();
