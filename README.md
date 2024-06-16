@@ -19,6 +19,12 @@ yarn build-raft-server
 PORT=8000 RPC_PORT=50000 yarn start-raft-server
 ```
 
+Run integration tests
+```
+yarn build-raft-server
+yarn test-integration
+```
+
 # Learnings
 - Raft protocol implementation
 - Improve Rust skills

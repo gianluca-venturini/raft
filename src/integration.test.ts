@@ -2,7 +2,7 @@
 import { times } from 'lodash';
 
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
-import { NotFoundError, getVar } from './api';
+import { NotFoundError, getVar, setVar } from './api';
 
 describe('integration', () => {
 
@@ -24,6 +24,11 @@ describe('integration', () => {
 
     it('read variable not found', async () => {
         await expect(getVar('foo')).rejects.toThrow(NotFoundError);
+    });
+
+    it('write and read variable', async () => {
+        await setVar('foo', 42);
+        expect(await getVar('foo')).toBe(42);
     });
 });
 

@@ -11,7 +11,7 @@ export function startRaftNode(index: number): RaftNodeProcesses {
         console.error(`stderr[${index}]: ${data}`);
     });
     return {
-        started: new Promise<void>((resolve, reject) => {
+        started: new Promise<void>(resolve => {
             child.stdout.on('data', (data) => {
                 console.log(`stdout[${index}]: ${data}`);
                 if (data.toString().includes('Web server started')) {
@@ -19,7 +19,7 @@ export function startRaftNode(index: number): RaftNodeProcesses {
                 }
             });
         }),
-        exit: () => new Promise((resolve, reject) => {
+        exit: () => new Promise(resolve => {
             console.log(`exiting server ${index}...`);
             child.kill('SIGTERM');
             child.on('close', (code) => {

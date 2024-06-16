@@ -1,26 +1,47 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
+use serde::Deserialize;
 use std::env;
 use std::sync::{Arc, RwLock};
 
 use crate::state;
 
-async fn get_variable(state: web::Data<Arc<RwLock<state::State>>>) -> HttpResponse {
+#[derive(Deserialize)]
+struct GetRequest {
+    key: String,
+}
+
+async fn get_variable(
+    state: web::Data<Arc<RwLock<state::State>>>,
+    query: web::Query<GetRequest>,
+) -> HttpResponse {
     let s = state.read().unwrap();
-    let var = s.state_machine.vars.get("key");
+    let var = s.state_machine.vars.get(&query.key);
     if let Some(ref variable) = var {
+        println!("Variable get: {} = {}", query.key, variable);
         HttpResponse::Ok().json(variable)
     } else {
+        println!("Variable get: {} not set", query.key);
         HttpResponse::NotFound().body("Variable not set")
     }
 }
 
-async fn set_variable(state: web::Data<Arc<RwLock<state::State>>>) -> HttpResponse {
+#[derive(Deserialize)]
+struct SetRequest {
+    key: String,
+    value: i32,
+}
+
+async fn set_variable(
+    state: web::Data<Arc<RwLock<state::State>>>,
+    body: web::Json<SetRequest>,
+) -> HttpResponse {
     state
         .write()
         .unwrap()
         .state_machine
         .vars
-        .insert("key".to_string(), 42);
+        .insert(body.key.clone(), body.value);
+    println!("Variable set: {} = {}", body.key, body.value);
     HttpResponse::Ok().body("Variable set")
 }
 
@@ -42,8 +63,6 @@ pub async fn start_web_server(
 
     let send_future = async move { server.await };
     send_future.await?;
-
-    println!("server started");
 
     Ok(())
 }
