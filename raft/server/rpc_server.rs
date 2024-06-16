@@ -1,5 +1,6 @@
 use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
+use std::env;
 use std::sync::{Arc, RwLock};
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -43,7 +44,9 @@ impl Raft for MyRaft {
 pub async fn start_rpc_server(
     state: Arc<RwLock<state::State>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let addr = "[::1]:50051".parse().unwrap();
+    let port =
+        env::var("RPC_PORT").expect("RPC_PORT environment variable is not set or cannot be read");
+    let addr = format!("127.0.0.1:{}", port).parse().unwrap();
     let raft = MyRaft { state: state };
 
     Server::builder()
