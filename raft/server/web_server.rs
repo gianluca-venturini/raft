@@ -35,11 +35,15 @@ pub async fn start_web_server(
             .route("/variable", web::get().to(get_variable))
             .route("/variable", web::post().to(set_variable))
     })
-    .bind(format!("127.0.0.1:{}", port))?
+    .bind(format!("localhost:{}", port))?
     .run();
+
+    println!("Web server started");
 
     let send_future = async move { server.await };
     send_future.await?;
+
+    println!("server started");
 
     Ok(())
 }
