@@ -13,6 +13,12 @@ Build the project
 yarn build
 ```
 
+Build and run Raft server
+```
+yarn build-raft-server
+PORT=8000 RPC_PORT=50000 yarn start-raft-server
+```
+
 # Learnings
 - Raft protocol implementation
 - Improve Rust skills
