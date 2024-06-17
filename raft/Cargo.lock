@@ -1263,7 +1263,9 @@ name = "raft_server"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "once_cell",
  "prost",
+ "rand",
  "serde",
  "serde_json",
  "tokio",

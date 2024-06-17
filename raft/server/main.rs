@@ -1,7 +1,9 @@
+use election::maybe_attempt_election;
 use std::sync::{Arc, RwLock};
 use tokio::task;
 use tokio::time::{interval, Duration};
 
+mod election;
 mod rpc_server;
 mod state;
 mod util;
@@ -14,11 +16,14 @@ fn spawn_timer(state: Arc<RwLock<state::State>>) {
 
         loop {
             interval.tick().await;
-            let state_guard = state.read().unwrap();
-            println!(
-                "Callback called! {}",
-                state_guard.last_received_heartbeat_timestamp_us
-            );
+            {
+                let state_guard = state.read().unwrap();
+                println!(
+                    "Callback called! {}",
+                    state_guard.last_received_heartbeat_timestamp_us
+                );
+            }
+            maybe_attempt_election(state.clone()).await;
         }
     });
 }
