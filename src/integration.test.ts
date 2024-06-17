@@ -32,9 +32,25 @@ describe('integration', () => {
     });
 
     it('all nodes are followers at the beginning', async () => {
-        expect((await raftNodes[0].api.getState()).role).toBe('Follower');
-        expect((await raftNodes[1].api.getState()).role).toBe('Follower');
-        expect((await raftNodes[2].api.getState()).role).toBe('Follower');
+        for (const node of raftNodes) {
+            expect((await node.api.getState()).role).toBe('Follower');
+        }
+    });
+
+    it('one node is elected leader', async () => {
+        let numLeaders = 0;
+        for (let attempts = 0; attempts < 10; attempts++) {
+            for (const node of raftNodes) {
+                if ((await node.api.getState()).role === 'Leader') {
+                    numLeaders++;
+                }
+            }
+            if (numLeaders > 0) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        expect(numLeaders).toBe(1);
     });
 });
 
