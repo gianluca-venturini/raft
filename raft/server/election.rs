@@ -19,6 +19,10 @@ const ELECTION_TIMEOUT_US: u128 = 1_000_000;
 pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
     {
         let s = state.lock().await;
+        // Only consider starting an election if the node is a follower
+        if s.role != state::Role::Follower {
+            return;
+        }
         let elapsed = get_current_time_microseconds() - s.last_received_heartbeat_timestamp_us;
         if elapsed < ELECTION_TIMEOUT_US {
             return;
@@ -39,6 +43,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
 
     let votes = Arc::new(Mutex::new(1)); // Vote for self
     s.persisted.voted_for = Some(node_id.to_string());
+    s.persisted.current_term += 1;
     let max_term = Arc::new(Mutex::new(0)); // Max term seen in responses
 
     let current_term = s.persisted.current_term;
@@ -85,10 +90,10 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         if *max_term > s.persisted.current_term {
             println!("Updating term to {}", *max_term);
             s.persisted.current_term = max(s.persisted.current_term, *max_term);
+            s.persisted.voted_for = None;
         }
         println!("Reverting to follower");
         s.role = state::Role::Follower;
-        s.persisted.voted_for = None;
     }
 }
 
