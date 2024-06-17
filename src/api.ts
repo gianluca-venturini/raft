@@ -26,3 +26,16 @@ export async function setVar(key: string, value: number): Promise<void> {
         throw new Error(`Network response was not ok ${response.status} ${response.statusText}`);
     }
 };
+
+interface RaftNodeState {
+    role: 'Follower' | 'Candidate' | 'Leader';
+}
+
+export async function getState(): Promise<RaftNodeState> {
+    const response = await fetch(`http://localhost:8000/state`);
+    if (!response.ok) {
+        throw new Error('Network response was not ok');
+    }
+    const data = await response.json() as RaftNodeState;
+    return data;
+};

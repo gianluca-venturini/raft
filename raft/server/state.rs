@@ -1,5 +1,7 @@
 use std::sync::{Arc, RwLock};
 
+use serde::{Deserialize, Serialize};
+
 enum Command {
     WriteVar { name: String, value: i32 },
     DeleteVar { name: String },
@@ -34,8 +36,8 @@ pub struct StateMachine {
     pub vars: std::collections::HashMap<String, i32>,
 }
 
-#[derive(PartialEq, Debug)]
-enum Role {
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
+pub enum Role {
     Follower,
     Candidate,
     Leader,

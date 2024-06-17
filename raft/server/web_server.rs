@@ -45,6 +45,14 @@ async fn set_variable(
     HttpResponse::Ok().body("Variable set")
 }
 
+/** Retrieve a summary of the state of raft node */
+async fn get_state(state: web::Data<Arc<RwLock<state::State>>>) -> HttpResponse {
+    let s = state.read().unwrap();
+    let mut response = std::collections::HashMap::new();
+    response.insert("role", &s.role);
+    HttpResponse::Ok().json(response)
+}
+
 pub async fn start_web_server(
     state: Arc<RwLock<state::State>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -55,6 +63,7 @@ pub async fn start_web_server(
             .app_data(web::Data::new(state))
             .route("/variable", web::get().to(get_variable))
             .route("/variable", web::post().to(set_variable))
+            .route("/state", web::get().to(get_state))
     })
     .bind(format!("localhost:{}", port))?
     .run();
