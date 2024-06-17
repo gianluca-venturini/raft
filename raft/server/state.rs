@@ -13,9 +13,9 @@ struct LogEntry {
 }
 
 #[derive(Default)]
-struct PersistedState {
-    current_term: u32,
-    voted_for: Option<u32>,
+pub struct PersistedState {
+    pub current_term: u32,
+    pub voted_for: Option<u32>,
     log: Vec<LogEntry>,
 }
 
@@ -51,7 +51,7 @@ impl Default for Role {
 
 #[derive(Default)]
 pub struct State {
-    persisted: PersistedState,
+    pub persisted: PersistedState,
     volatile: VolatileState,
     volatile_leader: Option<VolatileLeaderState>,
     pub state_machine: StateMachine,

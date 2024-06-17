@@ -22,7 +22,7 @@ impl Raft for MyRaft {
         &self,
         request: Request<AppendEntriesRequest>,
     ) -> Result<Response<AppendEntriesResponse>, Status> {
-        println!("request={:?}", request);
+        println!("append_entries request={:?}", request);
 
         {
             // Set the current timestamp as the last received heartbeat timestamp
@@ -32,10 +32,42 @@ impl Raft for MyRaft {
                 .last_received_heartbeat_timestamp_us = get_current_time_microseconds();
         }
 
+        // TODO: implement this response
         let reply = raft::AppendEntriesResponse {
             term: 1,
             success: true,
         };
+
+        Ok(Response::new(reply))
+    }
+
+    async fn request_vote(
+        &self,
+        request: Request<raft::RequestVoteRequest>,
+    ) -> Result<Response<raft::RequestVoteResponse>, Status> {
+        println!("request_vote request={:?}", request);
+
+        let mut s = self.state.write().unwrap();
+
+        let mut reply = raft::RequestVoteResponse {
+            term: request.get_ref().term,
+            vote_granted: true,
+        };
+        if request.get_ref().term < s.persisted.current_term {
+            println!("Vote not granted: candidate term is not up to date");
+            reply.term = s.persisted.current_term;
+            reply.vote_granted = false;
+        }
+        if s.persisted.voted_for.is_some()
+            && s.persisted.voted_for != Some(request.get_ref().candidate_id)
+        {
+            println!("Vote not granted: already voted for another candidate in this term");
+            reply.vote_granted = false;
+        } else {
+            println!("Vote granted");
+            s.persisted.voted_for = Some(request.get_ref().candidate_id);
+            s.persisted.current_term = request.get_ref().term;
+        }
 
         Ok(Response::new(reply))
     }
