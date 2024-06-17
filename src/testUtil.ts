@@ -1,12 +1,15 @@
 import { spawn } from 'child_process';
+import { RaftNode } from './api';
 
 export interface RaftNodeProcesses {
     started: Promise<void>,
-    exit: () => Promise<void>
+    exit: () => Promise<void>,
+    api: RaftNode,
 }
 
 export function startRaftNode(index: number): RaftNodeProcesses {
-    const child = spawn(`PORT=${8000 + index} RPC_PORT=${50000 + index} yarn start-raft-server`, [], { shell: true });
+    const port = 8000 + index;
+    const child = spawn(`PORT=${port} RPC_PORT=${50000 + index} yarn start-raft-server`, [], { shell: true });
     child.stderr.on('data', (data) => {
         console.error(`stderr[${index}]: ${data}`);
     });
@@ -26,6 +29,7 @@ export function startRaftNode(index: number): RaftNodeProcesses {
                 console.log(`exit[${index}]: ${code}`);
                 resolve();
             });
-        })
+        }),
+        api: new RaftNode('localhost', port),
     };
 }

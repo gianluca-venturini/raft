@@ -2,7 +2,7 @@
 import { times } from 'lodash';
 
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
-import { NotFoundError, getState, getVar, setVar } from './api';
+import { NotFoundError } from './api';
 
 describe('integration', () => {
 
@@ -23,16 +23,16 @@ describe('integration', () => {
     });
 
     it('read variable not found', async () => {
-        await expect(getVar('foo')).rejects.toThrow(NotFoundError);
+        await expect(raftNodes[0].api.getVar('foo')).rejects.toThrow(NotFoundError);
     });
 
     it('write and read variable', async () => {
-        await setVar('foo', 42);
-        expect(await getVar('foo')).toBe(42);
+        await raftNodes[0].api.setVar('foo', 42);
+        expect(await raftNodes[0].api.getVar('foo')).toBe(42);
     });
 
     it('node role is follower at the beginning', async () => {
-        expect((await getState()).role).toBe('Follower');
+        expect((await raftNodes[0].api.getState()).role).toBe('Follower');
     });
 });
 

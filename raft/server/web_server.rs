@@ -42,7 +42,9 @@ async fn set_variable(
         .vars
         .insert(body.key.clone(), body.value);
     println!("Variable set: {} = {}", body.key, body.value);
-    HttpResponse::Ok().body("Variable set")
+    let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    response.insert(&"state", "ok");
+    HttpResponse::Ok().json(response)
 }
 
 /** Retrieve a summary of the state of raft node */
