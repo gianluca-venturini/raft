@@ -2,6 +2,7 @@ use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
 use std::env;
 use std::sync::{Arc, RwLock};
+use tokio::sync::Mutex as AsyncMutex;
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::state;
@@ -13,7 +14,7 @@ pub mod raft {
 
 #[derive(Default)]
 pub struct MyRaft {
-    state: Arc<RwLock<state::State>>,
+    state: Arc<AsyncMutex<state::State>>,
 }
 
 #[tonic::async_trait]
@@ -26,10 +27,8 @@ impl Raft for MyRaft {
 
         {
             // Set the current timestamp as the last received heartbeat timestamp
-            self.state
-                .write()
-                .unwrap()
-                .last_received_heartbeat_timestamp_us = get_current_time_microseconds();
+            self.state.lock().await.last_received_heartbeat_timestamp_us =
+                get_current_time_microseconds();
         }
 
         // TODO: implement this response
@@ -47,7 +46,7 @@ impl Raft for MyRaft {
     ) -> Result<Response<raft::RequestVoteResponse>, Status> {
         println!("request_vote request={:?}", request);
 
-        let mut s = self.state.write().unwrap();
+        let mut s = self.state.lock().await;
 
         let mut reply = raft::RequestVoteResponse {
             term: request.get_ref().term,
@@ -59,13 +58,13 @@ impl Raft for MyRaft {
             reply.vote_granted = false;
         }
         if s.persisted.voted_for.is_some()
-            && s.persisted.voted_for != Some(request.get_ref().candidate_id)
+            && s.persisted.voted_for != Some(request.get_ref().candidate_id.to_string())
         {
             println!("Vote not granted: already voted for another candidate in this term");
             reply.vote_granted = false;
         } else {
             println!("Vote granted");
-            s.persisted.voted_for = Some(request.get_ref().candidate_id);
+            s.persisted.voted_for = Some(request.get_ref().candidate_id.to_string());
             s.persisted.current_term = request.get_ref().term;
         }
 
@@ -74,7 +73,7 @@ impl Raft for MyRaft {
 }
 
 pub async fn start_rpc_server(
-    state: Arc<RwLock<state::State>>,
+    state: Arc<AsyncMutex<state::State>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port =
         env::var("RPC_PORT").expect("RPC_PORT environment variable is not set or cannot be read");

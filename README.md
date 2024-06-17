@@ -16,7 +16,7 @@ yarn build
 Build and run Raft server
 ```
 yarn build-raft-server
-PORT=8000 RPC_PORT=50000 yarn start-raft-server
+ID=0 PORT=8000 RPC_PORT=50000 yarn start-raft-server
 ```
 
 Run integration tests

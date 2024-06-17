@@ -2,6 +2,7 @@ use actix_web::{web, App, HttpResponse, HttpServer};
 use serde::Deserialize;
 use std::env;
 use std::sync::{Arc, RwLock};
+use tokio::sync::Mutex as AsyncMutex;
 
 use crate::state;
 
@@ -11,10 +12,10 @@ struct GetRequest {
 }
 
 async fn get_variable(
-    state: web::Data<Arc<RwLock<state::State>>>,
+    state: web::Data<Arc<AsyncMutex<state::State>>>,
     query: web::Query<GetRequest>,
 ) -> HttpResponse {
-    let s = state.read().unwrap();
+    let s = state.lock().await;
     let var = s.state_machine.vars.get(&query.key);
     if let Some(ref variable) = var {
         println!("Variable get: {} = {}", query.key, variable);
@@ -32,12 +33,12 @@ struct SetRequest {
 }
 
 async fn set_variable(
-    state: web::Data<Arc<RwLock<state::State>>>,
+    state: web::Data<Arc<AsyncMutex<state::State>>>,
     body: web::Json<SetRequest>,
 ) -> HttpResponse {
     state
-        .write()
-        .unwrap()
+        .lock()
+        .await
         .state_machine
         .vars
         .insert(body.key.clone(), body.value);
@@ -48,15 +49,15 @@ async fn set_variable(
 }
 
 /** Retrieve a summary of the state of raft node */
-async fn get_state(state: web::Data<Arc<RwLock<state::State>>>) -> HttpResponse {
-    let s = state.read().unwrap();
+async fn get_state(state: web::Data<Arc<AsyncMutex<state::State>>>) -> HttpResponse {
+    let s = state.lock().await;
     let mut response = std::collections::HashMap::new();
     response.insert("role", &s.role);
     HttpResponse::Ok().json(response)
 }
 
 pub async fn start_web_server(
-    state: Arc<RwLock<state::State>>,
+    state: Arc<AsyncMutex<state::State>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port = env::var("PORT").expect("PORT environment variable is not set or cannot be read");
     let server = HttpServer::new(move || {

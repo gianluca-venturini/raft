@@ -9,7 +9,7 @@ export interface RaftNodeProcesses {
 
 export function startRaftNode(index: number): RaftNodeProcesses {
     const port = 8000 + index;
-    const child = spawn(`PORT=${port} RPC_PORT=${50000 + index} yarn start-raft-server`, [], { shell: true });
+    const child = spawn(`ID=${index} PORT=${port} RPC_PORT=${50000 + index} yarn start-raft-server`, [], { shell: true });
     child.stderr.on('data', (data) => {
         console.error(`stderr[${index}]: ${data}`);
     });

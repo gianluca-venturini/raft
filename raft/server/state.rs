@@ -15,7 +15,7 @@ struct LogEntry {
 #[derive(Default)]
 pub struct PersistedState {
     pub current_term: u32,
-    pub voted_for: Option<u32>,
+    pub voted_for: Option<String>,
     log: Vec<LogEntry>,
 }
 
@@ -62,12 +62,12 @@ pub struct State {
     /** The last time that a heartbeat was received from a leader, in this machine local time.
      * 0 if the current machine is the leader. */
     pub last_received_heartbeat_timestamp_us: u128,
-    /** The id of the current node */
-    pub id: u32,
+    /** Ids of the other nodes of the ring */
+    pub node_ids: Vec<String>,
 }
 
-pub fn init_state() -> Arc<RwLock<State>> {
-    return Arc::new(RwLock::new(State::default()));
+pub fn init_state() -> State {
+    return State::default();
 }
 
 mod tests {
@@ -76,11 +76,10 @@ mod tests {
     #[tokio::test]
     async fn test_init_state_empty() {
         let state = init_state();
-        let state_guard = state.read().unwrap();
-        assert_eq!(state_guard.persisted.current_term, 0);
-        assert_eq!(state_guard.volatile.commit_index, 0);
-        assert_eq!(state_guard.volatile.last_applied, 0);
-        assert_eq!(state_guard.state_machine.vars.len(), 0);
-        assert_eq!(state_guard.role, Role::Follower);
+        assert_eq!(state.persisted.current_term, 0);
+        assert_eq!(state.volatile.commit_index, 0);
+        assert_eq!(state.volatile.last_applied, 0);
+        assert_eq!(state.state_machine.vars.len(), 0);
+        assert_eq!(state.role, Role::Follower);
     }
 }
