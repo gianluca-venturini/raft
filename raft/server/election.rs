@@ -28,7 +28,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
     // Necessary to wait random time to prevent multiple nodes from starting an election at the same time
     let wait_time_us = {
         let mut rng = RNG.lock().unwrap();
-        rng.gen_range(1..=100_000)
+        rng.gen_range(1..=1_000_000)
     };
     println!("Waiting for {} us", wait_time_us);
     tokio::time::sleep(tokio::time::Duration::from_micros(wait_time_us)).await;

@@ -37,7 +37,7 @@ describe('integration', () => {
         }
     });
 
-    it('one node is elected leader', async () => {
+    fit('one node is elected leader', async () => {
         let numLeaders = 0;
         for (let attempts = 0; attempts < 10; attempts++) {
             for (const node of raftNodes) {

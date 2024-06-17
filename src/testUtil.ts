@@ -15,9 +15,17 @@ export function startRaftNode(index: number): RaftNodeProcesses {
     });
     return {
         started: new Promise<void>(resolve => {
+            let webServerStarted = false;
+            let rpcServerStarted = false;
             child.stdout.on('data', (data) => {
                 console.log(`stdout[${index}]: ${data}`);
                 if (data.toString().includes('Web server started')) {
+                    webServerStarted = true;
+                }
+                if (data.toString().includes('RPC server started')) {
+                    rpcServerStarted = true;
+                }
+                if (webServerStarted && rpcServerStarted) {
                     resolve();
                 }
             });

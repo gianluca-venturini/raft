@@ -2,7 +2,7 @@ use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
 use std::env;
 use std::sync::{Arc, RwLock};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{watch, Mutex as AsyncMutex};
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::state;
@@ -74,16 +74,23 @@ impl Raft for MyRaft {
 
 pub async fn start_rpc_server(
     state: Arc<AsyncMutex<state::State>>,
+    mut shutdown_rx: watch::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port =
         env::var("RPC_PORT").expect("RPC_PORT environment variable is not set or cannot be read");
-    let addr = format!("127.0.0.1:{}", port).parse().unwrap();
+    let addr = format!("[::1]:{}", port).parse().unwrap();
     let raft = MyRaft { state: state };
 
-    Server::builder()
+    let server = Server::builder()
         .add_service(RaftServer::new(raft))
-        .serve(addr)
-        .await?;
+        .serve_with_shutdown(addr, async {
+            shutdown_rx.changed().await.ok();
+        });
+
+    println!("RPC server started");
+
+    let send_future = async move { server.await };
+    send_future.await?;
 
     Ok(())
 }

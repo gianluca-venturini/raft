@@ -2,7 +2,7 @@ use actix_web::{web, App, HttpResponse, HttpServer};
 use serde::Deserialize;
 use std::env;
 use std::sync::{Arc, RwLock};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{watch, Mutex as AsyncMutex};
 
 use crate::state;
 
