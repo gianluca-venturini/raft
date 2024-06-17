@@ -55,9 +55,15 @@ pub struct State {
     volatile: VolatileState,
     volatile_leader: Option<VolatileLeaderState>,
     pub state_machine: StateMachine,
+
     // State about the current machine
+    /** Role of the node */
     pub role: Role,
+    /** The last time that a heartbeat was received from a leader, in this machine local time.
+     * 0 if the current machine is the leader. */
     pub last_received_heartbeat_timestamp_us: u128,
+    /** The id of the current node */
+    pub id: u32,
 }
 
 pub fn init_state() -> Arc<RwLock<State>> {

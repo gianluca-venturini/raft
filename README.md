@@ -30,3 +30,4 @@ yarn test-integration
 - Improve Rust skills
 - Structure a Rust project with multiple targets (WASM library, other binaries)
 - Use gRPC in Rust
+- Write meaningful tests for a distributed system

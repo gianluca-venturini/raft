@@ -18,7 +18,7 @@ describe('integration', () => {
     });
 
     it('do nothing', async () => {
-        // Tests if nodes spin up and down correctly
+        // Tests if nodes spin up and down correctly in beforeEach() and afterEach()
         await new Promise(resolve => setTimeout(resolve, 200));
     });
 
@@ -31,8 +31,10 @@ describe('integration', () => {
         expect(await raftNodes[0].api.getVar('foo')).toBe(42);
     });
 
-    it('node role is follower at the beginning', async () => {
+    it('all nodes are followers at the beginning', async () => {
         expect((await raftNodes[0].api.getState()).role).toBe('Follower');
+        expect((await raftNodes[1].api.getState()).role).toBe('Follower');
+        expect((await raftNodes[2].api.getState()).role).toBe('Follower');
     });
 });
 
