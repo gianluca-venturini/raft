@@ -1,7 +1,7 @@
 use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
 use std::env;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tokio::sync::{watch, Mutex as AsyncMutex};
 use tonic::{transport::Server, Request, Response, Status};
 

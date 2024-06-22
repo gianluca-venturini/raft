@@ -66,20 +66,34 @@ pub struct State {
     pub node_ids: Vec<String>,
 }
 
-pub fn init_state() -> State {
-    return State::default();
+pub fn init_state(num_nodes: u16) -> State {
+    let mut state = State::default();
+    for i in 0..num_nodes {
+        state.node_ids.push(i.to_string());
+    }
+    return state;
 }
 
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_init_state_empty() {
-        let state = init_state();
+    #[test]
+    fn test_init_state_empty() {
+        let state = init_state(0);
         assert_eq!(state.persisted.current_term, 0);
         assert_eq!(state.volatile.commit_index, 0);
         assert_eq!(state.volatile.last_applied, 0);
         assert_eq!(state.state_machine.vars.len(), 0);
+        assert_eq!(state.node_ids.len(), 0);
         assert_eq!(state.role, Role::Follower);
+    }
+
+    #[test]
+    fn test_init_node_ids() {
+        let state = init_state(3);
+        assert_eq!(state.node_ids.len(), 3);
+        assert_eq!(state.node_ids[0], "0");
+        assert_eq!(state.node_ids[1], "1");
+        assert_eq!(state.node_ids[2], "2");
     }
 }

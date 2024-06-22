@@ -4,12 +4,19 @@ import { times } from 'lodash';
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError } from './api';
 
-describe('integration', () => {
+describe('integration 3 nodes', () => {
+    integrationTestsWithNodes(3);
+});
 
+describe('integration 11 nodes', () => {
+    integrationTestsWithNodes(11);
+});
+
+function integrationTestsWithNodes(numNodes: number) {
     let raftNodes: RaftNodeProcesses[];
 
     beforeEach(async () => {
-        raftNodes = times(3).map(index => startRaftNode(index));
+        raftNodes = times(numNodes).map(index => startRaftNode(index, numNodes));
         await Promise.all(raftNodes.map(server => server.started));
     });
 
@@ -52,5 +59,5 @@ describe('integration', () => {
         }
         expect(numLeaders).toBe(1);
     });
-});
+}
 

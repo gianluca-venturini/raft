@@ -24,7 +24,7 @@ fn spawn_timer(state: Arc<AsyncMutex<state::State>>, id: &str) {
             {
                 let state_guard = state.lock().await;
                 println!(
-                    "Callback called! {}",
+                    "Last heartbeat timestamp us: {}",
                     state_guard.last_received_heartbeat_timestamp_us
                 );
             }
@@ -42,12 +42,11 @@ async fn main() {
     let id = env::var("ID").expect(
         "ID (raft node unique identifier) environment variable is not set or cannot be read",
     );
-    let state = Arc::new(AsyncMutex::new(state::init_state()));
-    {
-        // TODO: make the node ids configurable
-        let mut s = state.lock().await;
-        s.node_ids = vec!["0".to_string(), "1".to_string(), "2".to_string()];
-    }
+    let num_nodes: u16 = env::var("NUM_NODES").expect(
+        "NUM_NODES (total number of raft nodes) environment variable is not set or cannot be read",
+    ).parse()
+    .expect("NUM_NODES must be an integer");
+    let state = Arc::new(AsyncMutex::new(state::init_state(num_nodes)));
 
     spawn_timer(state.clone(), &id);
 

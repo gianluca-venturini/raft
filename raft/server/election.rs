@@ -1,6 +1,6 @@
 use once_cell::sync::Lazy;
 use raft::raft_client::RaftClient;
-use raft::{RequestVoteRequest, RequestVoteResponse};
+use raft::RequestVoteRequest;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::cmp::max;
@@ -34,7 +34,10 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         let mut rng = RNG.lock().unwrap();
         rng.gen_range(1..=1_000_000)
     };
-    println!("Waiting for {} us", wait_time_us);
+    println!(
+        "Waiting for {} us before attempting an election",
+        wait_time_us
+    );
     tokio::time::sleep(tokio::time::Duration::from_micros(wait_time_us)).await;
 
     println!("Attempting election");
