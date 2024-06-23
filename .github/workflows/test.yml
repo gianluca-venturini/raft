@@ -1,0 +1,32 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    container:
+      image: gianluca91/node-rust-yarn:latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install yarn dependencies
+      run: yarn install
+
+    - name: Build raft
+      run: yarn build-raft-server
+
+    - name: Run raft unit tests
+      run: yarn test-raft
+
+    - name: Run integration tests
+      run: yarn test-integration

@@ -29,11 +29,15 @@
     "build-esbuild": "node esbuild.cjs",
     "build-raft-lib": "cd raft/client && wasm-pack build --target bundler",
     "build-raft-server": "cd raft/server && cargo build --bin raft_server",
+    "build-docker-image": "docker build -t gianluca91/node-rust-yarn:latest .",
+    "push-docker-image": "docker push gianluca91/node-rust-yarn:latest",
     "start": "node dist/bundle.js",
     "start-raft-server": "./raft/target/debug/raft_server",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write",
     "test-raft": "cd raft/server && cargo test",
-    "test-integration": "jest"
+    "test-integration": "jest",
+    "test-github-ci": "act -j test",
+    "clean": "rm -rf node_modules && rm -rf dist && rm -rf raft/client/pkg && rm -rf raft/target && rm -rf raft/pkg"
   },
   "dependencies": {
     "lodash": "^4.17.21",

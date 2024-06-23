@@ -25,6 +25,12 @@ yarn build-raft-server
 yarn test-integration
 ```
 
+Update CI docker image
+```
+yarn build-docker-image
+yarn push-docker-image
+```
+
 ## TODO:
 - [] Implement AppendEntries RPC
 - [] Store the RPC client in a structure instead of creating a new one every time
