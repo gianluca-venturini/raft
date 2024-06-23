@@ -1,5 +1,5 @@
 use raft::raft_client::RaftClient;
-use raft::RequestVoteRequest;
+use raft::{AppendEntriesRequest, RequestVoteRequest};
 use std::cmp::max;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -79,6 +79,23 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         if *votes.lock().unwrap() > s.node_ids.len() / 2 {
             println!("Elected leader with majority votes");
             s.role = state::Role::Leader;
+
+            let node_ids = s.node_ids.clone();
+            let threads = node_ids
+                .iter()
+                // do not connect to self
+                .filter(|id| id != &node_id)
+                .map(|id| {
+                    let id = id.to_string();
+                    tokio::spawn(async move {
+                        // Send heartbeats to all nodes to inform them of the new leader
+                        let _ = send_heart_beat(&id, current_term).await;
+                    })
+                });
+
+            for thread in threads {
+                thread.await.unwrap();
+            }
         } else {
             println!("Election lost");
             let max_term = max_term.lock().unwrap();
@@ -112,6 +129,17 @@ async fn request_vote(
     println!("response={:?}", response);
 
     return Ok((response.get_ref().vote_granted, response.get_ref().term));
+}
+
+async fn send_heart_beat(dst_id: &str, term: u32) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
+    let request = tonic::Request::new(AppendEntriesRequest { term });
+
+    let response = client.append_entries(request).await?;
+
+    println!("response={:?}", response);
+
+    return Ok(());
 }
 
 /** Calculate the destination RPC url based on the id */

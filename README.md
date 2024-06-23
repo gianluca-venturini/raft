@@ -25,6 +25,10 @@ yarn build-raft-server
 yarn test-integration
 ```
 
+## TODO:
+- [] Implement AppendEntries RPC
+- [] Store the RPC client in a structure instead of creating a new one every time
+
 # Learnings
 - Raft protocol implementation
 - Improve Rust skills

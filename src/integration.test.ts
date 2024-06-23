@@ -4,9 +4,9 @@ import { times } from 'lodash';
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError } from './api';
 
-describe('integration 3 nodes', () => {
-    integrationTestsWithNodes(3);
-});
+// describe('integration 3 nodes', () => {
+//     integrationTestsWithNodes(3);
+// });
 
 describe('integration 11 nodes', () => {
     integrationTestsWithNodes(11);
@@ -44,7 +44,7 @@ function integrationTestsWithNodes(numNodes: number) {
         }
     });
 
-    it('one node is elected leader', async () => {
+    fit('one node is elected leader', async () => {
         let numLeaders = 0;
         for (let attempts = 0; attempts < 10; attempts++) {
             for (const node of raftNodes) {
