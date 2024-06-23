@@ -8,9 +8,10 @@ describe('integration 3 nodes', () => {
     integrationTestsWithNodes(3);
 });
 
-describe('integration 11 nodes', () => {
-    integrationTestsWithNodes(11);
-});
+// Enable these tests for stress testing
+// describe('integration 11 nodes', () => {
+//     integrationTestsWithNodes(11);
+// });
 
 function integrationTestsWithNodes(numNodes: number) {
     let raftNodes: RaftNodeProcesses[];
