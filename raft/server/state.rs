@@ -61,7 +61,7 @@ pub struct State {
     pub role: Role,
     /** The last time that a heartbeat was received from a leader, in this machine local time.
      * 0 if the current machine is the leader. */
-    pub last_received_heartbeat_timestamp_us: u128,
+    pub last_received_heartbeat_timestamp_ms: u128,
     /** Ids of the other nodes of the ring */
     pub node_ids: Vec<String>,
 }

@@ -6,7 +6,7 @@ use tokio::sync::{watch, Mutex as AsyncMutex};
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::state;
-use crate::util::get_current_time_microseconds;
+use crate::util::get_current_time_ms;
 
 pub mod raft {
     tonic::include_proto!("raft");
@@ -27,8 +27,7 @@ impl Raft for MyRaft {
 
         {
             // Set the current timestamp as the last received heartbeat timestamp
-            self.state.lock().await.last_received_heartbeat_timestamp_us =
-                get_current_time_microseconds();
+            self.state.lock().await.last_received_heartbeat_timestamp_ms = get_current_time_ms();
         }
 
         // TODO: implement this response
