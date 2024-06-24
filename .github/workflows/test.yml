@@ -14,6 +14,8 @@ jobs:
 
     container:
       image: gianluca91/node-rust-yarn:latest
+      options: >-
+        --volume ${GITHUB_WORKSPACE}:/usr/src/ap
 
     steps:
     - name: Checkout repository
