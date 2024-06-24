@@ -19,6 +19,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Setting stable rust version
+      run: rustup default stable
+
     - name: Install yarn dependencies
       run: yarn info-rust
 
