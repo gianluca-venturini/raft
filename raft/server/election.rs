@@ -10,7 +10,7 @@ pub mod raft {
     tonic::include_proto!("raft");
 }
 
-const ELECTION_TIMEOUT_MS: u128 = 1_000;
+const ELECTION_TIMEOUT_MS: u128 = 10_000;
 pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
     {
         let s = state.lock().await;

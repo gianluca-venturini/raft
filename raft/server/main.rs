@@ -17,7 +17,7 @@ mod web_server;
 
 static RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::from_entropy()));
 
-const MAYBE_ATTEMPT_ELECTION_INTERVAL_MS: u64 = 100;
+const MAYBE_ATTEMPT_ELECTION_INTERVAL_MS: u64 = 500;
 
 /** Periodically transition the server role. */
 fn spawn_timer(state: Arc<AsyncMutex<state::State>>, id: &str) {
@@ -26,7 +26,7 @@ fn spawn_timer(state: Arc<AsyncMutex<state::State>>, id: &str) {
         // Necessary to wait random time to decrease the probability multiple nodes starting an election at the same time
         let wait_time_jitter_ms = {
             let mut rng = RNG.lock().unwrap();
-            rng.gen_range(0..=200)
+            rng.gen_range(0..=2000)
         };
 
         loop {
