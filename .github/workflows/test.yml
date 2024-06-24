@@ -20,6 +20,9 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install yarn dependencies
+      run: yarn info-rust
+
+    - name: Install yarn dependencies
       run: yarn install
 
     - name: Build raft
