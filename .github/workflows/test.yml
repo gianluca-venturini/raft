@@ -14,12 +14,10 @@ jobs:
 
     container:
       image: gianluca91/node-rust-yarn:latest
-      options: >-
-        --volume ${GITHUB_WORKSPACE}:/usr/src/ap
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Install yarn dependencies
       run: yarn install
