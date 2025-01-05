@@ -3,6 +3,7 @@ FROM alpine:3.21
 
 # Install required dependencies
 RUN apk add --no-cache \
+    bash \
     git=2.47.1-r0 \
     nodejs=22.11.0-r1 \
     yarn=1.22.22-r1 \
