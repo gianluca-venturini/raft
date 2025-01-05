@@ -8,9 +8,14 @@ describe('integration 3 nodes', () => {
     integrationTests(3);
 });
 
-// Enable these tests for stress testing
+// Enable below to stress test the system
+
 // describe('integration 11 nodes', () => {
-//     integrationTestsWithNodes(11);
+//     integrationTests(11);
+// });
+
+// describe('integration 101 nodes', () => {
+//     integrationTests(101);
 // });
 
 function integrationTests(numNodes: number) {
