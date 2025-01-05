@@ -31,43 +31,50 @@ function integrationTestsWithNodes(numNodes: number) {
         await new Promise(resolve => setTimeout(resolve, 200));
     });
 
-    it('read variable not found', async () => {
-        await expect(raftNodes[0].api.getVar('foo')).rejects.toThrow(NotFoundError);
-    });
-
-    it('write and read variable same server', async () => {
-        await raftNodes[0].api.setVar('foo', 42);
-        expect(await raftNodes[0].api.getVar('foo')).toBe(42);
-    });
-
-    xit('write and read variable different server', async () => {
-        await raftNodes[0].api.setVar('foo', 42);
-        expect(await raftNodes[1].api.getVar('foo')).toBe(42);
-    });
-
-    it('all nodes are followers at the beginning', async () => {
-        for (const node of raftNodes) {
-            console.log('testing node');
-            const state = await node.api.getState();
-            console.log('state', state);
-            expect(state.role).toBe('Follower');
-        }
-    });
-
-    it('one node is elected leader', async () => {
-        let numLeaders = 0;
-        for (let attempts = 0; attempts < 10; attempts++) {
+    describe('leader election', () => {
+        it('all nodes are followers at the beginning', async () => {
             for (const node of raftNodes) {
-                if ((await node.api.getState()).role === 'Leader') {
-                    numLeaders++;
+                console.log('testing node');
+                const state = await node.api.getState();
+                console.log('state', state);
+                expect(state.role).toBe('Follower');
+            }
+        });
+
+        it('one node is elected leader', async () => {
+            let numLeaders = 0;
+            for (let attempts = 0; attempts < 10; attempts++) {
+                for (const node of raftNodes) {
+                    if ((await node.api.getState()).role === 'Leader') {
+                        numLeaders++;
+                    }
                 }
+                if (numLeaders > 0) {
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
-            if (numLeaders > 0) {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        expect(numLeaders).toBe(1);
+            expect(numLeaders).toBe(1);
+        });
     });
+
+    describe('variables', () => {
+        it('read variable not found', async () => {
+            await expect(raftNodes[0].api.getVar('foo')).rejects.toThrow(NotFoundError);
+        });
+
+        it('write and read variable same server', async () => {
+            await raftNodes[0].api.setVar('foo', 42);
+            expect(await raftNodes[0].api.getVar('foo')).toBe(42);
+        });
+
+        xit('write and read variable different server', async () => {
+            await raftNodes[0].api.setVar('foo', 42);
+            expect(await raftNodes[1].api.getVar('foo')).toBe(42);
+        });
+    });
+
+
+
 }
 
