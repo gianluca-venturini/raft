@@ -29,8 +29,6 @@
     "build-esbuild": "node esbuild.cjs",
     "build-raft-lib": "cd raft/client && wasm-pack build --target bundler",
     "build-raft-server": "cd raft/server && cargo build --bin raft_server",
-    "build-docker-image": "docker build --platform linux/amd64 -t gianluca91/node-rust-yarn:latest .",
-    "push-docker-image": "docker push gianluca91/node-rust-yarn:latest",
     "info-rust": "rustup --version && cargo --version && rustc --version",
     "start": "node dist/bundle.js",
     "start-raft-server": "./raft/target/debug/raft_server",
