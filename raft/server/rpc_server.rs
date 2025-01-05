@@ -26,9 +26,10 @@ impl Raft for MyRaft {
         println!("append_entries request={:?}", request);
 
         {
+            let mut state = self.state.lock().await;
             // Set the current timestamp as the last received heartbeat timestamp
-            self.state.lock().await.last_received_heartbeat_timestamp_ms = get_current_time_ms();
-            self.state.lock().await.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
+            state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
+            state.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
         }
 
         // TODO: implement this response
