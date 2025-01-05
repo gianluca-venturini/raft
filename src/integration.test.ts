@@ -70,15 +70,10 @@ function integrationTests(numNodes: number) {
             await expect(raftClient.getVar('foo')).rejects.toThrow(NotFoundError);
         });
 
-        // it('write and read variable same server', async () => {
-        //     await raftClient.setVar('foo', 42);
-        //     expect(await raftClient.getVar('foo')).toBe(42);
-        // });
-
-        // xit('write and read variable different server', async () => {
-        //     await raftClient.setVar('foo', 42);
-        //     expect(await raftClient.getVar('foo')).toBe(42);
-        // });
+        it('write and read variable', async () => {
+            await raftClient.setVar('foo', 42);
+            expect(await raftClient.getVar('foo')).toBe(42);
+        });
     });
 
 

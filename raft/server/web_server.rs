@@ -11,21 +11,24 @@ struct GetRequest {
     key: String,
 }
 
+async fn handle_not_leader(leader_id: &Option<String>) -> HttpResponse {
+    let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    if let Some(ref leader_id) = leader_id {
+        response.insert("leaderId", leader_id.as_str());
+        println!("Current node not leader. Leader is {}", leader_id);
+    } else {
+        println!("Leader is unknown");
+    }
+    HttpResponse::PermanentRedirect().json(response)
+}
+
 async fn get_variable(
     state: web::Data<Arc<AsyncMutex<state::State>>>,
     query: web::Query<GetRequest>,
 ) -> HttpResponse {
     let s = state.lock().await;
     if s.role != state::Role::Leader {
-        println!("Variable get: {} not leader", query.key);
-        let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
-        if let Some(ref leader_id) = s.volatile.leader_id {
-            response.insert(&"leaderId", leader_id.as_str());
-            println!("Leader is {}", leader_id);
-        } else {
-            println!("Leader is unknown");
-        }
-        return HttpResponse::PermanentRedirect().json(response);
+        return handle_not_leader(&s.volatile.leader_id).await;
     }
     let var = s.state_machine.vars.get(&query.key);
     if let Some(ref variable) = var {
@@ -47,15 +50,15 @@ async fn set_variable(
     state: web::Data<Arc<AsyncMutex<state::State>>>,
     body: web::Json<SetRequest>,
 ) -> HttpResponse {
-    state
-        .lock()
-        .await
-        .state_machine
-        .vars
-        .insert(body.key.clone(), body.value);
+    let mut s = state.lock().await;
+    if s.role != state::Role::Leader {
+        return handle_not_leader(&s.volatile.leader_id).await;
+    }
+
+    s.state_machine.vars.insert(body.key.clone(), body.value);
     println!("Variable set: {} = {}", body.key, body.value);
     let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
-    response.insert(&"state", "ok");
+    response.insert("state", "ok");
     HttpResponse::Ok().json(response)
 }
 

@@ -69,6 +69,10 @@ export class RaftNode implements RaftClientApi {
             if (response.status === 404) {
                 throw new NotFoundError();
             }
+            if (response.status === 308) {
+                const { leaderId }: { leaderId: string | undefined } = await response.json();
+                throw new NotLeaderError(leaderId);
+            }
             throw new Error(`Network response was not ok ${response.status} ${response.statusText}`);
         }
         const data = await response.json() as TResponse;
@@ -111,6 +115,7 @@ export class RaftClient implements RaftClientApi {
                         // Wait some time before trying again because a leader may be elected soon
                         // This time should be more than it takes to elect a leader
                         await new Promise(resolve => setTimeout(resolve, 1000));
+                        console.log('No leader known, trying again with a random node');
                         continue;
                     }
                     if (!this.nodes[leaderId]) {
