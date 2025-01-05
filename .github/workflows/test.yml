@@ -11,28 +11,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    container:
-      image: gianluca91/node-rust-yarn:latest
-
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setting stable rust version
-      run: rustup default stable
-
-    - name: Install yarn dependencies
-      run: yarn info-rust
-
-    - name: Install yarn dependencies
-      run: yarn install
-
-    - name: Build raft
-      run: yarn build-raft-server
-
-    - name: Run raft unit tests
-      run: yarn test-raft
-
-    - name: Run integration tests
-      run: yarn test-integration
+    - name: Run tests in Dev Container
+      uses: devcontainers/ci@v0.3
+      with:
+        runCmd: |
+          yarn install
+          yarn info-rust
+          yarn install
+          yarn build-raft-server
+          yarn test-raft
+          yarn test-integration
