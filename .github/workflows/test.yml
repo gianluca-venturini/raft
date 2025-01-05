@@ -26,4 +26,4 @@ jobs:
           yarn build-raft-server
           yarn test-raft
           yarn test-integration
-        imageName: ghcr.io/gianluca-venturini/raft-dev-container:latest
+        imageName: ghcr.io/gianluca-venturini/raft-dev-container
