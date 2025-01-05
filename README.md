@@ -2,11 +2,7 @@
 A toy implementation of the Raft consensus algorithm
 
 ## Get started
-Install dependencies
-```
-brew install cmake
-brew install protobuf
-```
+Install [devcontainer](https://code.visualstudio.com/docs/devcontainers/containers).
 
 Build the project
 ```
@@ -25,12 +21,6 @@ yarn build-raft-server
 yarn test-integration
 ```
 
-Update CI docker image
-```
-yarn build-docker-image
-yarn push-docker-image
-```
-
 ## TODO:
 - [ ] Implement AppendEntries RPC
 - [ ] Store the RPC client in a structure instead of creating a new one every time
@@ -41,3 +31,4 @@ yarn push-docker-image
 - Structure a Rust project with multiple targets (WASM library, other binaries)
 - Use gRPC in Rust
 - Write meaningful tests for a distributed system
+- Use devcontainer

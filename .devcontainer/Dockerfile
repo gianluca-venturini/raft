@@ -5,9 +5,10 @@ FROM alpine:3.21
 RUN apk add --no-cache \
     git=2.47.1-r0 \
     nodejs=22.11.0-r1 \
-    yarn=1.22.22-r1 
+    yarn=1.22.22-r1 \
     rust=1.83.0-r0 \
     cargo=1.83.0-r0 \
+    protobuf=24.4-r4
 
 # # Install Yarn globally
 # RUN npm install -g yarn
