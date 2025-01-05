@@ -28,6 +28,7 @@ impl Raft for MyRaft {
         {
             // Set the current timestamp as the last received heartbeat timestamp
             self.state.lock().await.last_received_heartbeat_timestamp_ms = get_current_time_ms();
+            self.state.lock().await.leader_id = Some(request.get_ref().leader_id.to_string());
         }
 
         // TODO: implement this response

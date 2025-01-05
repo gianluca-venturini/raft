@@ -64,6 +64,8 @@ pub struct State {
     pub last_received_heartbeat_timestamp_ms: u128,
     /** Ids of the other nodes of the ring */
     pub node_ids: Vec<String>,
+    /** Believed Id of the leader node */
+    pub leader_id: Option<String>,
 }
 
 pub fn init_state(num_nodes: u16) -> State {

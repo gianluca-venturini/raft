@@ -1,24 +1,26 @@
 import fetch from 'node-fetch';
 
-export class NotFoundError extends Error {}
+export class NotFoundError extends Error { }
 
 interface RaftNodeState {
     role: 'Follower' | 'Candidate' | 'Leader';
 }
 
 export class RaftNode {
-    constructor(private host: string, private port: number) {}
+    constructor(private host: string, private port: number) { }
 
     async getVar(key: string): Promise<number> {
-
+        console.log('getVar', key);
         return this.getRequest<number>('/variable', { key });
     };
-    
+
     async setVar(key: string, value: number): Promise<void> {
+        console.log('setVar', key, value);
         return this.postRequest<void>('/variable', { key, value });
     };
 
     async getState(): Promise<RaftNodeState> {
+        console.log('getState');
         return this.getRequest<RaftNodeState>('/state', {});
     };
 

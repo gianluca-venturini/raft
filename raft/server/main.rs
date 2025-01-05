@@ -6,6 +6,7 @@ use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{watch, Mutex as AsyncMutex};
 use tokio::{signal, task};
+use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 use tracing_subscriber;
 
@@ -64,11 +65,15 @@ async fn main() {
     ));
     let web_server = task::spawn(web_server::start_web_server(state.clone()));
 
-    // let _ = tokio::try_join!(rpc_server, web_server);
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
 
     tokio::select! {
         _ = signal::ctrl_c() => {
             println!("Received Ctrl+C, sending shutdown signal...");
+            let _ = shutdown_tx.send(());
+        }
+        _ = sigterm.recv() => {
+            println!("Received SIGTERM, sending shutdown signal...");
             let _ = shutdown_tx.send(());
         }
         _ = rpc_server => {

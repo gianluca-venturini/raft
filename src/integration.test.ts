@@ -18,6 +18,7 @@ function integrationTestsWithNodes(numNodes: number) {
 
     beforeEach(async () => {
         raftNodes = times(numNodes).map(index => startRaftNode(index, numNodes));
+        // Wait until all servers are started
         await Promise.all(raftNodes.map(server => server.started));
     });
 
@@ -34,14 +35,22 @@ function integrationTestsWithNodes(numNodes: number) {
         await expect(raftNodes[0].api.getVar('foo')).rejects.toThrow(NotFoundError);
     });
 
-    it('write and read variable', async () => {
+    it('write and read variable same server', async () => {
         await raftNodes[0].api.setVar('foo', 42);
         expect(await raftNodes[0].api.getVar('foo')).toBe(42);
     });
 
+    xit('write and read variable different server', async () => {
+        await raftNodes[0].api.setVar('foo', 42);
+        expect(await raftNodes[1].api.getVar('foo')).toBe(42);
+    });
+
     it('all nodes are followers at the beginning', async () => {
         for (const node of raftNodes) {
-            expect((await node.api.getState()).role).toBe('Follower');
+            console.log('testing node');
+            const state = await node.api.getState();
+            console.log('state', state);
+            expect(state.role).toBe('Follower');
         }
     });
 

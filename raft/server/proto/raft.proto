@@ -9,6 +9,7 @@ service Raft {
 
 message AppendEntriesRequest {
   uint32 term = 1;
+  string leaderId = 2;
 }
 
 message AppendEntriesResponse {

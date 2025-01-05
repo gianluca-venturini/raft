@@ -48,7 +48,9 @@ async fn set_variable(
     HttpResponse::Ok().json(response)
 }
 
-/** Retrieve a summary of the state of raft node */
+/** Retrieve a summary of the state of raft node 
+ * only use this for debugging purposes
+ */
 async fn get_state(state: web::Data<Arc<AsyncMutex<state::State>>>) -> HttpResponse {
     let s = state.lock().await;
     let mut response = std::collections::HashMap::new();

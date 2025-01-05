@@ -47,7 +47,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         // do not connect to self since we already voted for self
         .filter(|id| id != &node_id)
         .map(|id| {
-            let node_id = node_id.to_string();
+            let node_id = node_id.to_string(); // Clone here
             let id = id.to_string();
             let votes = Arc::clone(&votes);
             let max_term = Arc::clone(&max_term);
@@ -87,9 +87,10 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
                 .filter(|id| id != &node_id)
                 .map(|id| {
                     let id = id.to_string();
+                    let node_id = node_id.to_string();
                     tokio::spawn(async move {
                         // Send heartbeats to all nodes to inform them of the new leader
-                        let _ = send_heart_beat(&id, current_term).await;
+                        let _ = send_heart_beat(&id, &node_id, current_term).await;
                     })
                 });
 
@@ -131,9 +132,9 @@ async fn request_vote(
     return Ok((response.get_ref().vote_granted, response.get_ref().term));
 }
 
-async fn send_heart_beat(dst_id: &str, term: u32) -> Result<(), Box<dyn std::error::Error>> {
+async fn send_heart_beat(dst_id: &str, id: &str, term: u32) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
-    let request = tonic::Request::new(AppendEntriesRequest { term });
+    let request = tonic::Request::new(AppendEntriesRequest { term, leader_id: id.to_string() });
 
     let response = client.append_entries(request).await?;
 
