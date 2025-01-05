@@ -16,6 +16,17 @@ async fn get_variable(
     query: web::Query<GetRequest>,
 ) -> HttpResponse {
     let s = state.lock().await;
+    if s.role != state::Role::Leader {
+        println!("Variable get: {} not leader", query.key);
+        let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        if let Some(ref leader_id) = s.volatile.leader_id {
+            response.insert(&"leaderId", leader_id.as_str());
+            println!("Leader is {}", leader_id);
+        } else {
+            println!("Leader is unknown");
+        }
+        return HttpResponse::PermanentRedirect().json(response);
+    }
     let var = s.state_machine.vars.get(&query.key);
     if let Some(ref variable) = var {
         println!("Variable get: {} = {}", query.key, variable);

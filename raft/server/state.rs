@@ -16,19 +16,21 @@ struct LogEntry {
 pub struct PersistedState {
     pub current_term: u32,
     pub voted_for: Option<String>,
-    log: Vec<LogEntry>,
+    pub log: Vec<LogEntry>,
 }
 
 #[derive(Default)]
-struct VolatileState {
-    commit_index: u32,
-    last_applied: u32,
+pub struct VolatileState {
+    pub commit_index: u32,
+    pub last_applied: u32,
+    /** Believed Id of the leader node */
+    pub leader_id: Option<String>,
 }
 
 #[derive(Default)]
 struct VolatileLeaderState {
-    next_index: Vec<u32>,
-    match_index: Vec<u32>,
+    pub next_index: Vec<u32>,
+    pub match_index: Vec<u32>,
 }
 
 #[derive(Default)]
@@ -52,8 +54,8 @@ impl Default for Role {
 #[derive(Default)]
 pub struct State {
     pub persisted: PersistedState,
-    volatile: VolatileState,
-    volatile_leader: Option<VolatileLeaderState>,
+    pub volatile: VolatileState,
+    pub volatile_leader: Option<VolatileLeaderState>,
     pub state_machine: StateMachine,
 
     // State about the current machine
@@ -64,8 +66,6 @@ pub struct State {
     pub last_received_heartbeat_timestamp_ms: u128,
     /** Ids of the other nodes of the ring */
     pub node_ids: Vec<String>,
-    /** Believed Id of the leader node */
-    pub leader_id: Option<String>,
 }
 
 pub fn init_state(num_nodes: u16) -> State {
