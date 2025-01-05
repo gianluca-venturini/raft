@@ -14,7 +14,11 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"rust-lang.rust-analyzer"
+				"rust-lang.rust-analyzer",
+				"github.vscode-github-actions",
+				"ms-vscode-remote.remote-containers",
+				"GitHub.copilot",
+				"GitHub.copilot-chat"
 			]
 		}
 	}

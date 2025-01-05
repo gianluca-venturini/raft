@@ -16,6 +16,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # Authenticate to GitHub Container Registry (ghcr.io)
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Run tests in Dev Container
       uses: devcontainers/ci@v0.3
       with:
