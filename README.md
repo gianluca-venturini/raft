@@ -32,8 +32,8 @@ yarn push-docker-image
 ```
 
 ## TODO:
-- [] Implement AppendEntries RPC
-- [] Store the RPC client in a structure instead of creating a new one every time
+- [ ] Implement AppendEntries RPC
+- [ ] Store the RPC client in a structure instead of creating a new one every time
 
 # Learnings
 - Raft protocol implementation
