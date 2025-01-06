@@ -6,6 +6,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use once_cell::sync::Lazy;
+use super::update::update_node;
 
 use crate::{state, util::get_current_time_ms, rpc_util::calculate_rpc_server_dst};
 
@@ -91,8 +92,9 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         if *votes.lock().unwrap() > s.node_ids.len() / 2 {
             println!("Elected leader with majority votes");
             s.role = state::Role::Leader;
-
             let node_ids = s.node_ids.clone();
+            drop(s);
+
             let threads = node_ids
                 .iter()
                 // do not connect to self
@@ -100,9 +102,11 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
                 .map(|id| {
                     let id = id.to_string();
                     let node_id = node_id.to_string();
+                    let state = Arc::clone(&state);
+                    println!("Time to send updates");
                     tokio::spawn(async move {
-                        // Send heartbeats to all nodes to inform them of the new leader
-                        let _ = send_heart_beat(&id, &node_id, current_term).await;
+                        // Send updates to all nodes to inform them of the new leader
+                        let _ = update_node(&id, &node_id, state).await;
                     })
                 });
 
@@ -142,15 +146,4 @@ async fn request_vote(
     println!("response={:?}", response);
 
     return Ok((response.get_ref().vote_granted, response.get_ref().term));
-}
-
-async fn send_heart_beat(dst_id: &str, id: &str, term: u32) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
-    let request = tonic::Request::new(AppendEntriesRequest { term, leader_id: id.to_string(), entries: vec![] });
-
-    let response = client.append_entries(request).await?;
-
-    println!("response={:?}", response);
-
-    return Ok(());
 }

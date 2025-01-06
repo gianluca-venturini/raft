@@ -27,7 +27,10 @@ message DeleteVar {
 message AppendEntriesRequest {
     uint32 term = 1;
     string leaderId = 2;
-    repeated LogEntry entries = 3;
+    uint32 prevLogIndex = 3;
+    uint32 prevLogTerm = 4;
+    repeated LogEntry entries = 5;
+    uint32 leaderCommit = 6;
 }
 
 message AppendEntriesResponse {

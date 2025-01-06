@@ -15,11 +15,12 @@ pub mod raft {
 
 pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
     let s = state.lock().await;
-    let current_term = s.persisted.current_term;
     if s.role != state::Role::Leader {
         return;
     }
     let node_ids = s.node_ids.clone();
+    drop(s);  // release lock before spawning threads
+
     let threads = node_ids
         .iter()
         // do not connect to self
@@ -27,11 +28,9 @@ pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &s
         .map(|id| {
             let id = id.to_string();
             let node_id = node_id.to_string();
-            tokio::spawn({
-                let log = s.persisted.log.clone();
-                async move {
-                    let _ = update_node(&id, &node_id, current_term, log).await;
-                }
+            let state = Arc::clone(&state);
+            tokio::spawn(async move {
+                let _ = update_node(&id, &node_id, state).await;
             })
         });
 
@@ -61,19 +60,37 @@ fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
     }
 }
 
-async fn update_node(dst_id: &str, id: &str, term: u32, log: Vec<state::LogEntry>) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
-    
+pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::State>>) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: only send partial log rather than the whole log based on what every node needs
-    let entries = log.iter().map(convert_log_entry).collect();
+    println!("Before lock");
+    let s = state.lock().await;
+    println!("After lock");
+    let term = s.persisted.current_term;
+    let entries: Vec<raft::LogEntry> = s.persisted.log.iter().map(convert_log_entry).collect();
+
+    
+    // Get the index and term of the entry preceding new ones
+    let prev_log_index = if s.persisted.log.is_empty() { 0 } else { (s.persisted.log.len() - 1) as u32 };
+    let prev_log_term = if prev_log_index == 0 { 0 } else { s.persisted.log[prev_log_index as usize - 1].term };
+    let leader_commit = s.volatile.commit_index;
+    drop(s);  // release lock before network call
+
+    println!("Sending update to node {} with term {} and entries {:?}", dst_id, term, entries);
+    let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
+
     let request = tonic::Request::new(AppendEntriesRequest {
         term,
         leader_id: id.to_string(),
+        prev_log_index,
+        prev_log_term,
         entries,
+        leader_commit,
     });
 
     let response = client.append_entries(request).await?;
     println!("response={:?}", response);
+
+    // TODO: handle rejected updates
 
     Ok(())
 }
