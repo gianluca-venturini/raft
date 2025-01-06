@@ -7,9 +7,27 @@ service Raft {
   rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse);
 }
 
+message LogEntry {
+    uint32 term = 1;
+    oneof command {
+        WriteVar write_var = 2;
+        DeleteVar delete_var = 3;
+    }
+}
+
+message WriteVar {
+    string name = 1;
+    int32 value = 2;
+}
+
+message DeleteVar {
+    string name = 1;
+}
+
 message AppendEntriesRequest {
-  uint32 term = 1;
-  string leaderId = 2;
+    uint32 term = 1;
+    string leaderId = 2;
+    repeated LogEntry entries = 3;
 }
 
 message AppendEntriesResponse {

@@ -1,4 +1,5 @@
-use election::{maybe_attempt_election, maybe_send_update};
+use election::maybe_attempt_election;
+use update::maybe_send_update;
 use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{watch, Mutex as AsyncMutex};
@@ -8,9 +9,11 @@ use tracing::info;
 use tracing_subscriber;
 
 mod election;
+mod update;
 mod rpc_server;
 mod state;
 mod util;
+mod rpc_util;
 mod web_server;
 
 const MAYBE_ATTEMPT_ELECTION_INTERVAL_MS: u64 = 500;

@@ -3,17 +3,19 @@ use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
 use crate::util::get_current_time_ms;
 
-enum Command {
+#[derive(Clone)]
+pub enum Command {
     WriteVar { name: String, value: i32 },
     DeleteVar { name: String },
 }
 
-struct LogEntry {
-    term: u32,
-    command: Command,
+#[derive(Clone)]
+pub struct LogEntry {
+    pub term: u32,
+    pub command: Command,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PersistedState {
     pub current_term: u32,
     pub voted_for: Option<String>,

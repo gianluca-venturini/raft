@@ -7,7 +7,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use once_cell::sync::Lazy;
 
-use crate::{state, util::get_current_time_ms};
+use crate::{state, util::get_current_time_ms, rpc_util::calculate_rpc_server_dst};
 
 pub mod raft {
     tonic::include_proto!("raft");
@@ -123,33 +123,6 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
     }
 }
 
-pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
-    let s = state.lock().await;
-    let current_term = s.persisted.current_term;
-    if (s.role != state::Role::Leader) {
-        return;
-    }
-    let node_ids = s.node_ids.clone();
-    let threads = node_ids
-        .iter()
-        // do not connect to self
-        .filter(|id| id != &node_id)
-        .map(|id| {
-            let id = id.to_string();
-            let node_id = node_id.to_string();
-            tokio::spawn(async move {
-                // Send heartbeats to all nodes to inform them that the leader is still alive
-                // TODO: send real updates
-                let _ = send_heart_beat(&id, &node_id, current_term).await;
-            })
-        });
-
-    for thread in threads {
-        thread.await.unwrap();
-    }
-}
-
-
 async fn request_vote(
     dst_id: &str,
     term: u32,
@@ -173,18 +146,11 @@ async fn request_vote(
 
 async fn send_heart_beat(dst_id: &str, id: &str, term: u32) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
-    let request = tonic::Request::new(AppendEntriesRequest { term, leader_id: id.to_string() });
+    let request = tonic::Request::new(AppendEntriesRequest { term, leader_id: id.to_string(), entries: vec![] });
 
     let response = client.append_entries(request).await?;
 
     println!("response={:?}", response);
 
     return Ok(());
-}
-
-/** Calculate the destination RPC url based on the id */
-fn calculate_rpc_server_dst(id: &str) -> String {
-    // For now keep it simple and assume it's a 0-based integer
-    let id_int = id.parse::<u32>().unwrap();
-    format!("http://[::1]:{}", 50000 + id_int)
 }
