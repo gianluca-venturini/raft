@@ -27,7 +27,8 @@ yarn test-integration
 ```
 
 ## TODO:
-- [ ] Implement AppendEntries RPC
+- [x] Implement AppendEntries RPC
+- [ ] The leader commits values (sending update to majority of followers) before applying to the state machine
 - [ ] Store the RPC client in a structure instead of creating a new one every time
 
 # Learnings

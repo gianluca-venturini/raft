@@ -71,6 +71,25 @@ pub struct State {
     pub node_ids: Vec<String>,
 }
 
+impl State {
+    pub fn applyCommitted(&mut self) {
+        while self.volatile.last_applied < self.volatile.commit_index {
+            let next_index = self.volatile.last_applied as usize;
+            if let Some(entry) = self.persisted.log.get(next_index) {
+                match &entry.command {
+                    Command::WriteVar { name, value } => {
+                        self.state_machine.vars.insert(name.clone(), *value);
+                    }
+                    Command::DeleteVar { name } => {
+                        self.state_machine.vars.remove(name);
+                    }
+                }
+                self.volatile.last_applied += 1;
+            }
+        }
+    }
+}
+
 pub fn init_state(num_nodes: u16) -> State {
     let mut state = State::default();
     for i in 0..num_nodes {
@@ -102,5 +121,55 @@ mod tests {
         assert_eq!(state.node_ids[0], "0");
         assert_eq!(state.node_ids[1], "1");
         assert_eq!(state.node_ids[2], "2");
+    }
+
+    #[test]
+    fn test_apply_committed_write() {
+        let mut state = init_state(1);
+        state.persisted.log.push(LogEntry {
+            term: 1,
+            command: Command::WriteVar {
+                name: "a".to_string(),
+                value: 1,
+            },
+        });
+        state.volatile.commit_index = 1;
+        
+        state.applyCommitted();
+        
+        assert_eq!(state.volatile.last_applied, 1);
+        assert_eq!(state.state_machine.vars.get("a"), Some(&1));
+    }
+
+    #[test]
+    fn test_override_committed_write() {
+        let mut state = init_state(1);
+        state.persisted.log.extend(vec![
+            LogEntry {
+                term: 1,
+                command: Command::WriteVar {
+                    name: "a".to_string(),
+                    value: 1,
+                },
+            },
+            LogEntry {
+                term: 1,
+                command: Command::WriteVar {
+                    name: "a".to_string(),
+                    value: 2,
+                },
+            },
+        ]);
+        
+        state.volatile.commit_index = 1;
+        state.applyCommitted();
+        assert_eq!(state.volatile.last_applied, 1);
+        assert_eq!(state.state_machine.vars.get("a"), Some(&1));
+        
+        state.volatile.commit_index = 2;
+        state.applyCommitted();
+        assert_eq!(state.volatile.last_applied, 2);
+        assert_eq!(state.state_machine.vars.get("a"), Some(&2));
+        
     }
 }

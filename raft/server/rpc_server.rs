@@ -12,6 +12,23 @@ pub mod raft {
     tonic::include_proto!("raft");
 }
 
+fn convert_proto_entry(entry: &raft::LogEntry) -> state::LogEntry {
+    let command = match &entry.command {
+        Some(raft::log_entry::Command::WriteVar(w)) => state::Command::WriteVar {
+            name: w.name.clone(),
+            value: w.value,
+        },
+        Some(raft::log_entry::Command::DeleteVar(d)) => state::Command::DeleteVar {
+            name: d.name.clone(),
+        },
+        None => panic!("Log entry command cannot be empty"),
+    };
+    state::LogEntry {
+        term: entry.term,
+        command,
+    }
+}
+
 #[derive(Default)]
 pub struct MyRaft {
     state: Arc<AsyncMutex<state::State>>,
@@ -25,18 +42,43 @@ impl Raft for MyRaft {
     ) -> Result<Response<AppendEntriesResponse>, Status> {
         println!("append_entries request={:?}", request);
 
+        let mut reply = raft::AppendEntriesResponse {
+            term: 0,
+            success: true,
+        };
+
         {
             let mut state = self.state.lock().await;
             // Set the current timestamp as the last received heartbeat timestamp
             state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
             state.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
-        }
 
-        // TODO: implement this response
-        let reply = raft::AppendEntriesResponse {
-            term: 1,
-            success: true,
-        };
+            let prev_log_index = request.get_ref().prev_log_index as usize;
+            if state.persisted.log.len() < prev_log_index {
+                println!("Append entries failed: log is too small for comparison");
+                reply.success = false;
+            } else if state.persisted.log[(prev_log_index - 1) as usize].term != request.get_ref().prev_log_term {
+                println!("Append entries failed: log term does not match");
+                reply.success = false;
+            } else {
+                println!("Append entries succeeded");
+                state.persisted.log = state.persisted.log[..prev_log_index].to_vec();
+                
+                let entries: Vec<state::LogEntry> = request
+                    .get_ref()
+                    .entries
+                    .iter()
+                    .map(convert_proto_entry)
+                    .collect();
+                
+                state.persisted.log.extend(entries);
+                state.persisted.current_term = request.get_ref().term;
+                state.volatile.commit_index = request.get_ref().leader_commit;
+                state.applyCommitted();
+            }
+
+            reply.term = state.persisted.current_term;
+        }
 
         Ok(Response::new(reply))
     }
