@@ -20,20 +20,20 @@ interface RaftClientApi {
 /** Communicates directly with a single node.
  * If the node is not the leader, certain actions may fail. */
 export class RaftNode implements RaftClientApi {
-    constructor(private host: string, private port: number) { }
+    constructor(private host: string, private port: number, private nodeId: string) { }
 
     async getVar(key: string): Promise<number> {
-        console.log('getVar', key);
+        console.log(`getVar [${this.nodeId}] ${key}`);
         return this.getRequest<number>('/variable', { key });
     };
 
     async setVar(key: string, value: number): Promise<void> {
-        console.log('setVar', key, value);
+        console.log(`setVar [${this.nodeId}] ${key}=${value}`);
         return this.postRequest<void>('/variable', { key, value });
     };
 
     async getState(): Promise<RaftNodeState> {
-        console.log('getState');
+        console.log(`getState [${this.nodeId}]`);
         return this.getRequest<RaftNodeState>('/state', {});
     };
 

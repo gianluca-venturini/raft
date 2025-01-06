@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
+use crate::util::get_current_time_ms;
 
 enum Command {
     WriteVar { name: String, value: i32 },
@@ -73,6 +74,8 @@ pub fn init_state(num_nodes: u16) -> State {
     for i in 0..num_nodes {
         state.node_ids.push(i.to_string());
     }
+    // Initialize to now to avoid immediate election
+    state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
     return state;
 }
 

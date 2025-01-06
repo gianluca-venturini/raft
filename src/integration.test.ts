@@ -74,9 +74,17 @@ function integrationTests(numNodes: number) {
             await raftClient.setVar('foo', 42);
             expect(await raftClient.getVar('foo')).toBe(42);
         });
+
+        xit('write and read variable after leader failure', async () => {
+            await raftClient.setVar('foo', 42);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            for (const node of raftNodes) {
+                if ((await node.api.getState()).role === 'Leader') {
+                    node.exit();
+                }
+            }
+            expect(await raftClient.getVar('foo')).toBe(42);
+        });
     });
-
-
-
 }
 

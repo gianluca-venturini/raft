@@ -3,6 +3,9 @@ use raft::{AppendEntriesRequest, RequestVoteRequest};
 use std::cmp::max;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use once_cell::sync::Lazy;
 
 use crate::{state, util::get_current_time_ms};
 
@@ -10,7 +13,10 @@ pub mod raft {
     tonic::include_proto!("raft");
 }
 
-const ELECTION_TIMEOUT_MS: u128 = 10_000;
+static RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::from_entropy()));
+
+pub const ELECTION_TIMEOUT_MS: u64 = 150;
+
 pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
     {
         let s = state.lock().await;
@@ -19,12 +25,17 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
             return;
         }
         let elapsed = get_current_time_ms() - s.last_received_heartbeat_timestamp_ms;
+        // Necessary to wait random time to decrease the probability multiple nodes starting an election at the same time
+        let wait_time_jitter_ms = {
+            let mut rng = RNG.lock().unwrap();
+            rng.gen_range(0..=150)
+        };
         println!(
             "Last heartbeat ms timestamp: {}",
             s.last_received_heartbeat_timestamp_ms
         );
         println!("Elapsed ms since heartbeat: {}", elapsed);
-        if elapsed < ELECTION_TIMEOUT_MS {
+        if elapsed < (ELECTION_TIMEOUT_MS + wait_time_jitter_ms).into() {
             return;
         }
     }
@@ -36,6 +47,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
 
         s.persisted.voted_for = Some(node_id.to_string());
         s.persisted.current_term += 1;
+        s.role = state::Role::Candidate;
 
         (s.node_ids.clone(), s.persisted.current_term)
     };
@@ -110,6 +122,33 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         }
     }
 }
+
+pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
+    let s = state.lock().await;
+    let current_term = s.persisted.current_term;
+    if (s.role != state::Role::Leader) {
+        return;
+    }
+    let node_ids = s.node_ids.clone();
+    let threads = node_ids
+        .iter()
+        // do not connect to self
+        .filter(|id| id != &node_id)
+        .map(|id| {
+            let id = id.to_string();
+            let node_id = node_id.to_string();
+            tokio::spawn(async move {
+                // Send heartbeats to all nodes to inform them that the leader is still alive
+                // TODO: send real updates
+                let _ = send_heart_beat(&id, &node_id, current_term).await;
+            })
+        });
+
+    for thread in threads {
+        thread.await.unwrap();
+    }
+}
+
 
 async fn request_vote(
     dst_id: &str,

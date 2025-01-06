@@ -48,6 +48,6 @@ export function startRaftNode(index: number, numNodes: number): RaftNodeProcesse
                 resolve();
             });
         }),
-        api: new RaftNode('localhost', port),
+        api: new RaftNode('localhost', port, `${index}`),
     };
 }

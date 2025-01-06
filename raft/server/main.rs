@@ -1,7 +1,4 @@
-use election::maybe_attempt_election;
-use once_cell::sync::Lazy;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use election::{maybe_attempt_election, maybe_send_update};
 use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{watch, Mutex as AsyncMutex};
@@ -16,26 +13,19 @@ mod state;
 mod util;
 mod web_server;
 
-static RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::from_entropy()));
-
 const MAYBE_ATTEMPT_ELECTION_INTERVAL_MS: u64 = 500;
 
 /** Periodically transition the server role. */
 fn spawn_timer(state: Arc<AsyncMutex<state::State>>, id: &str) {
     let id = id.to_string();
     tokio::spawn(async move {
-        // Necessary to wait random time to decrease the probability multiple nodes starting an election at the same time
-        let wait_time_jitter_ms = {
-            let mut rng = RNG.lock().unwrap();
-            rng.gen_range(0..=2000)
-        };
-
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(
-                MAYBE_ATTEMPT_ELECTION_INTERVAL_MS + wait_time_jitter_ms,
+                election::ELECTION_TIMEOUT_MS / 10,
             ))
             .await;
             maybe_attempt_election(state.clone(), &id).await;
+            maybe_send_update(state.clone(), &id).await;
         }
     });
 }
