@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
 use serde::Deserialize;
+use serde_json::{json, Value};
 use std::env;
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
@@ -67,8 +68,10 @@ async fn set_variable(
  */
 async fn get_state(state: web::Data<Arc<AsyncMutex<state::State>>>) -> HttpResponse {
     let s = state.lock().await;
-    let mut response = std::collections::HashMap::new();
-    response.insert("role", &s.role);
+    let response = json!({
+        "role": s.role,
+        "log": s.persisted.log,
+    });
     HttpResponse::Ok().json(response)
 }
 

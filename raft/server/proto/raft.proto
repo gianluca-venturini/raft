@@ -12,6 +12,7 @@ message LogEntry {
     oneof command {
         WriteVar write_var = 2;
         DeleteVar delete_var = 3;
+        Noop noop = 4;
     }
 }
 
@@ -23,6 +24,8 @@ message WriteVar {
 message DeleteVar {
     string name = 1;
 }
+
+message Noop {}
 
 message AppendEntriesRequest {
     uint32 term = 1;

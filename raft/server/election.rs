@@ -92,6 +92,13 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         if *votes.lock().unwrap() > s.node_ids.len() / 2 {
             println!("Elected leader with majority votes");
             s.role = state::Role::Leader;
+            let current_term = s.persisted.current_term;
+            // Push Noop as the first term entry to immediately have an entry for this term to
+            // communicate to other nodes
+            s.persisted.log.push(state::LogEntry {
+                term: current_term,
+                command: state::Command::Noop,
+            });
             let node_ids = s.node_ids.clone();
             drop(s);
 

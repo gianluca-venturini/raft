@@ -21,6 +21,7 @@ fn convert_proto_entry(entry: &raft::LogEntry) -> state::LogEntry {
         Some(raft::log_entry::Command::DeleteVar(d)) => state::Command::DeleteVar {
             name: d.name.clone(),
         },
+        Some(raft::log_entry::Command::Noop(_)) => state::Command::Noop,
         None => panic!("Log entry command cannot be empty"),
     };
     state::LogEntry {
@@ -54,10 +55,10 @@ impl Raft for MyRaft {
             state.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
 
             let prev_log_index = request.get_ref().prev_log_index as usize;
-            if state.persisted.log.len() < prev_log_index {
+            if prev_log_index > 0 && state.persisted.log.len() <= prev_log_index - 1 {
                 println!("Append entries failed: log is too small for comparison");
                 reply.success = false;
-            } else if state.persisted.log[(prev_log_index - 1) as usize].term != request.get_ref().prev_log_term {
+            } else if prev_log_index > 0 && state.persisted.log[(prev_log_index - 1) as usize].term != request.get_ref().prev_log_term {
                 println!("Append entries failed: log term does not match");
                 reply.success = false;
             } else {

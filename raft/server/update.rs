@@ -52,6 +52,9 @@ fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
                 name: name.clone(),
             })
         }
+        state::Command::Noop => {
+            raft::log_entry::Command::Noop(raft::Noop {})
+        }
     };
 
     raft::LogEntry {
@@ -62,9 +65,7 @@ fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
 
 pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::State>>) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: only send partial log rather than the whole log based on what every node needs
-    println!("Before lock");
     let s = state.lock().await;
-    println!("After lock");
     let term = s.persisted.current_term;
     let entries: Vec<raft::LogEntry> = s.persisted.log.iter().map(convert_log_entry).collect();
 

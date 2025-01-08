@@ -3,19 +3,21 @@ use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
 use crate::util::get_current_time_ms;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
+#[serde(tag = "type")]
 pub enum Command {
     WriteVar { name: String, value: i32 },
     DeleteVar { name: String },
+    Noop,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct LogEntry {
     pub term: u32,
     pub command: Command,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize)]
 pub struct PersistedState {
     pub current_term: u32,
     pub voted_for: Option<String>,
@@ -83,6 +85,7 @@ impl State {
                     Command::DeleteVar { name } => {
                         self.state_machine.vars.remove(name);
                     }
+                    Command::Noop => {}
                 }
                 self.volatile.last_applied += 1;
             }

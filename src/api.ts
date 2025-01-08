@@ -10,6 +10,13 @@ export class NotLeaderError extends Error {
 
 interface RaftNodeState {
     role: 'Follower' | 'Candidate' | 'Leader';
+    log: {
+        term: number;
+        command:
+        | { type: 'WriteVar'; name: string; value: number }
+        | { type: 'DeleteVar'; name: string }
+        | { type: 'Noop' };
+    }[];
 }
 
 interface RaftClientApi {
