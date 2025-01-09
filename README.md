@@ -40,3 +40,4 @@ yarn test-integration
 - Use gRPC in Rust
 - Write meaningful tests for a distributed system
 - Use devcontainer
+- Concurrency in Rust: RwLock, Arc and state shared among threads
