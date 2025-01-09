@@ -2,7 +2,7 @@ use election::maybe_attempt_election;
 use update::maybe_send_update;
 use std::env;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{watch, Mutex as AsyncMutex};
+use tokio::sync::{watch, RwLock as AsyncRwLock};
 use tokio::{signal, task};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
@@ -19,16 +19,15 @@ mod web_server;
 const MAYBE_ATTEMPT_ELECTION_INTERVAL_MS: u64 = 500;
 
 /** Periodically transition the server role. */
-fn spawn_timer(state: Arc<AsyncMutex<state::State>>, id: &str) {
-    let id = id.to_string();
+fn spawn_timer(state: Arc<AsyncRwLock<state::State>>) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(
                 election::ELECTION_TIMEOUT_MS / 10,
             ))
             .await;
-            maybe_attempt_election(state.clone(), &id).await;
-            maybe_send_update(state.clone(), &id).await;
+            maybe_attempt_election(state.clone()).await;
+            maybe_send_update(state.clone()).await;
         }
     });
 }
@@ -47,9 +46,9 @@ async fn main() {
     ).parse()
     .expect("NUM_NODES must be an integer");
     let storage_path = env::var_os("STORAGE_PATH").map(|p| p.into_string().unwrap());
-    let state = Arc::new(AsyncMutex::new(state::init_state(num_nodes, storage_path)));
+    let state = Arc::new(AsyncRwLock::new(state::init_state(num_nodes, &id, storage_path)));
 
-    spawn_timer(state.clone(), &id);
+    spawn_timer(state.clone());
 
     let (shutdown_tx, shutdown_rx) = watch::channel(());
 

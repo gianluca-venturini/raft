@@ -1,5 +1,5 @@
 import { keys, values } from 'lodash';
-import fetch from 'node-fetch';
+import fetch, { FetchError } from 'node-fetch';
 
 export class NotFoundError extends Error { }
 export class NotLeaderError extends Error {
@@ -24,6 +24,8 @@ interface RaftClientApi {
     setVar(key: string, value: number): Promise<void>;
 }
 
+const REQUEST_TIMEOUT_MS = 300;
+
 /** Communicates directly with a single node.
  * If the node is not the leader, certain actions may fail. */
 export class RaftNode implements RaftClientApi {
@@ -31,24 +33,32 @@ export class RaftNode implements RaftClientApi {
 
     async getVar(key: string): Promise<number> {
         console.log(`getVar [${this.nodeId}] ${key}`);
-        return this.getRequest<number>('/variable', { key });
+        const result = await this.getRequest<number>('/variable', { key });
+        console.log(`getVar [${this.nodeId}] ${key}=${JSON.stringify(result)}`);
+        return result;
     };
 
     async setVar(key: string, value: number): Promise<void> {
         console.log(`setVar [${this.nodeId}] ${key}=${value}`);
-        return this.postRequest<void>('/variable', { key, value });
+        const result = await this.postRequest<void>('/variable', { key, value });
+        console.log(`setVar [${this.nodeId}] ${key}=${value}=${JSON.stringify(result)}`);
+        return result;
     };
 
     async getState(): Promise<RaftNodeState> {
         console.log(`getState [${this.nodeId}]`);
-        return this.getRequest<RaftNodeState>('/state', {});
+        const result = await this.getRequest<RaftNodeState>('/state', {});
+        console.log(`getState [${this.nodeId}] = ${JSON.stringify(JSON.stringify(result))}`);
+        return result;
     };
 
     private async getRequest<TResponse>(path: string, params: Record<string, string>): Promise<TResponse> {
         const url = new URL(`http://${this.host}:${this.port}${path}`);
         const urlSearchParams = new URLSearchParams(params);
         url.search = urlSearchParams.toString();
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), {
+            timeout: REQUEST_TIMEOUT_MS
+        });
         if (!response.ok) {
             if (response.status === 404) {
                 throw new NotFoundError();
@@ -71,6 +81,7 @@ export class RaftNode implements RaftClientApi {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(params),
+            timeout: REQUEST_TIMEOUT_MS
         });
         if (!response.ok) {
             if (response.status === 404) {
@@ -129,6 +140,13 @@ export class RaftClient implements RaftClientApi {
                         throw new Error(`Leader ${leaderId} not known to client`);
                     }
                     node = this.nodes[leaderId];
+                    continue;
+                }
+                if (error instanceof FetchError) {
+                    // Wait some time before trying again because the node may be down
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log('Network error, retrying with random node', error);
+                    node = this.getRandomNode();
                     continue;
                 }
                 throw error;

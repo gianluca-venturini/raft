@@ -3,8 +3,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::env;
 use std::sync::Arc;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::RwLock as AsyncRwLock;
 
+use crate::maybe_send_update;
 use crate::state;
 
 #[derive(Deserialize)]
@@ -24,10 +25,10 @@ async fn handle_not_leader(leader_id: &Option<String>) -> HttpResponse {
 }
 
 async fn get_variable(
-    state: web::Data<Arc<AsyncMutex<state::State>>>,
+    state: web::Data<Arc<AsyncRwLock<state::State>>>,
     query: web::Query<GetRequest>,
 ) -> HttpResponse {
-    let s = state.lock().await;
+    let s = state.read().await;
     if s.role != state::Role::Leader {
         return handle_not_leader(&s.volatile.leader_id).await;
     }
@@ -48,26 +49,27 @@ struct SetRequest {
 }
 
 async fn set_variable(
-    state: web::Data<Arc<AsyncMutex<state::State>>>,
+    state: web::Data<Arc<AsyncRwLock<state::State>>>,
     body: web::Json<SetRequest>,
 ) -> HttpResponse {
-    let mut s = state.lock().await;
-    if s.role != state::Role::Leader {
-        return handle_not_leader(&s.volatile.leader_id).await;
+    {
+        let mut s = state.write().await;
+        if s.role != state::Role::Leader {
+            return handle_not_leader(&s.volatile.leader_id).await;
+        }
+    
+        let entry = state::LogEntry {
+            term: s.get_current_term(),
+            command: state::Command::WriteVar {
+                name: body.key.clone(),
+                value: body.value,
+            },
+        };
+        s.append_log_entry(entry);
     }
 
-    let entry = state::LogEntry {
-        term: s.get_current_term(),
-        command: state::Command::WriteVar {
-            name: body.key.clone(),
-            value: body.value,
-        },
-    };
-    s.append_log_entry(entry);
-
-    // TODO: only consider committed after the majority of nodes have responded positively to an update
-    s.volatile.commit_index = s.get_log().len() as u32;
-    s.apply_committed();
+    maybe_send_update(state.get_ref().clone()).await;
+    // TODO: do not return until the update has been sent to a majority of nodes and is committed
     
     println!("Variable set: {} = {}", body.key, body.value);
     let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
@@ -78,8 +80,8 @@ async fn set_variable(
 /** Retrieve a summary of the state of raft node 
  * only use this for debugging purposes
  */
-async fn get_state(state: web::Data<Arc<AsyncMutex<state::State>>>) -> HttpResponse {
-    let s = state.lock().await;
+async fn get_state(state: web::Data<Arc<AsyncRwLock<state::State>>>) -> HttpResponse {
+    let s = state.read().await;
     let response = json!({
         "role": s.role,
         "log": s.get_log(),
@@ -88,7 +90,7 @@ async fn get_state(state: web::Data<Arc<AsyncMutex<state::State>>>) -> HttpRespo
 }
 
 pub async fn start_web_server(
-    state: Arc<AsyncMutex<state::State>>,
+    state: Arc<AsyncRwLock<state::State>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port = env::var("PORT").expect("PORT environment variable is not set or cannot be read");
     let server = HttpServer::new(move || {

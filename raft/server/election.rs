@@ -2,7 +2,7 @@ use raft::raft_client::RaftClient;
 use raft::{AppendEntriesRequest, RequestVoteRequest};
 use std::cmp::max;
 use std::sync::{Arc, Mutex};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::RwLock as AsyncRwLock;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use once_cell::sync::Lazy;
@@ -18,9 +18,9 @@ static RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::from_entropy()
 
 pub const ELECTION_TIMEOUT_MS: u64 = 150;
 
-pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
+pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
     {
-        let s = state.lock().await;
+        let s = state.read().await;
         // Only consider starting an election if the node is a follower
         if s.role != state::Role::Follower {
             return;
@@ -43,15 +43,16 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
 
     println!("Attempting election");
 
-    let (node_ids, current_term) = {
-        let mut s = state.lock().await;
+    let (node_ids, node_id, current_term) = {
+        let mut s = state.write().await;
+        let node_id = s.node_id.clone();
 
         s.set_voted_for(Some(node_id.to_string()));
         let current_term = s.get_current_term();
         s.set_current_term(current_term + 1);
         s.role = state::Role::Candidate;
 
-        (s.node_ids.clone(), s.get_current_term())
+        (s.node_ids.clone(), node_id, s.get_current_term())
     };
     let max_term = Arc::new(Mutex::new(0)); // Max term seen in responses
     let votes = Arc::new(Mutex::new(1)); // Vote for self
@@ -59,14 +60,14 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
     let threads = node_ids
         .iter()
         // do not connect to self since we already voted for self
-        .filter(|id| id != &node_id)
+        .filter(|id| *id != &node_id)
         .map(|id| {
-            let node_id = node_id.to_string(); // Clone here
             let id = id.to_string();
             let votes = Arc::clone(&votes);
             let max_term = Arc::clone(&max_term);
+            let candidate_id = node_id.clone();
             tokio::spawn(async move {
-                let result = request_vote(&id, current_term, &node_id).await;
+                let result = request_vote(&id, current_term, &candidate_id).await;
                 if let Err(e) = result {
                     println!("Error: {}", e);
                     // Not a big deal, will attempt to be elected from majority of nodes
@@ -89,7 +90,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
     }
 
     {
-        let mut s = state.lock().await;
+        let mut s = state.write().await;
         if *votes.lock().unwrap() > s.node_ids.len() / 2 {
             println!("Elected leader with majority votes");
             s.role = state::Role::Leader;
@@ -101,26 +102,28 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
                 command: state::Command::Noop,
             });
             let node_ids = s.node_ids.clone();
+            let node_id = s.node_id.clone();
             drop(s);
 
             let threads = node_ids
                 .iter()
                 // do not connect to self
-                .filter(|id| id != &node_id)
+                .filter(|id| **id != node_id)
                 .map(|id| {
                     let id = id.to_string();
-                    let node_id = node_id.to_string();
                     let state = Arc::clone(&state);
-                    println!("Time to send updates");
+                    println!("Sending update to all nodes to enstablish leadership");
                     tokio::spawn(async move {
                         // Send updates to all nodes to inform them of the new leader
-                        let _ = update_node(&id, &node_id, state).await;
+                        let _ = update_node(&id, state).await;
                     })
                 });
 
+                
             for thread in threads {
                 thread.await.unwrap();
             }
+            println!("Update sent to all nodes");
         } else {
             println!("Election lost");
             let max_term = max_term.lock().unwrap();

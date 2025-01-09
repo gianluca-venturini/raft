@@ -2,7 +2,7 @@ use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
 use std::env;
 use std::sync::Arc;
-use tokio::sync::{watch, Mutex as AsyncMutex};
+use tokio::sync::{watch, RwLock as AsyncRwLock};
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::state;
@@ -32,7 +32,7 @@ fn convert_proto_entry(entry: &raft::LogEntry) -> state::LogEntry {
 
 #[derive(Default)]
 pub struct MyRaft {
-    state: Arc<AsyncMutex<state::State>>,
+    state: Arc<AsyncRwLock<state::State>>,
 }
 
 #[tonic::async_trait]
@@ -49,7 +49,7 @@ impl Raft for MyRaft {
         };
 
         {
-            let mut state = self.state.lock().await;
+            let mut state = self.state.write().await;
             state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
             state.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
 
@@ -93,7 +93,7 @@ impl Raft for MyRaft {
     ) -> Result<Response<raft::RequestVoteResponse>, Status> {
         println!("request_vote request={:?}", request);
 
-        let mut s = self.state.lock().await;
+        let mut s = self.state.write().await;
 
         let mut reply = raft::RequestVoteResponse {
             term: request.get_ref().term,
@@ -120,7 +120,7 @@ impl Raft for MyRaft {
 }
 
 pub async fn start_rpc_server(
-    state: Arc<AsyncMutex<state::State>>,
+    state: Arc<AsyncRwLock<state::State>>,
     mut shutdown_rx: watch::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port =

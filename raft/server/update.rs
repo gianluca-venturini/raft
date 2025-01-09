@@ -1,8 +1,8 @@
 use raft::raft_client::RaftClient;
 use raft::{AppendEntriesRequest, RequestVoteRequest};
 use std::cmp::max;
-use std::sync::{Arc, Mutex};
-use tokio::sync::Mutex as AsyncMutex;
+use std::sync::Arc;
+use tokio::sync::RwLock as AsyncRwLock;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use once_cell::sync::Lazy;
@@ -13,24 +13,23 @@ pub mod raft {
     tonic::include_proto!("raft");
 }
 
-pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &str) {
-    let s = state.lock().await;
+pub async fn maybe_send_update(state: Arc<AsyncRwLock<state::State>>) {
+    let s = state.read().await;
     if s.role != state::Role::Leader {
         return;
     }
     let node_ids = s.node_ids.clone();
-    drop(s);  // release lock before spawning threads
+    let node_id = s.node_id.clone();
 
     let futures = node_ids
         .iter()
         // do not connect to self
-        .filter(|id| id != &node_id)
+        .filter(|id| **id != node_id)
         .map(|id| {
             let id = id.to_string();
-            let node_id = node_id.to_string();
             let state = Arc::clone(&state);
             tokio::spawn(async move {
-                update_node(&id, &node_id, state).await
+                update_node(&id, state).await
             })
         })
         .collect::<Vec<_>>();
@@ -44,16 +43,24 @@ pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &s
         }
     }
 
-    // If majority of nodes responded successfully, update commit index
-    {
-        let mut s = state.lock().await;
-        let majority = s.node_ids.len() / 2;
-        if successful_responses > majority {
-            if let Some(last_log_index) = s.get_log().len().checked_sub(1) {
-                s.volatile.commit_index = last_log_index as u32;
-            }
+    let majority = s.node_ids.len() / 2;
+    if successful_responses > majority {
+        println!("Majority of nodes have accepted the update");
+        // Index of the entry that the leader believe is the latest
+        // and the majority of followers agree
+        let new_commit_index = s.get_log().len() as u32;
+        drop(s);
+    
+        {
+            let mut s = state.write().await;
+            s.volatile.commit_index = new_commit_index;
+            s.apply_committed();
         }
+    } else {
+        // TODO: Handle the case in which not majority of nodes have accepted the update
+        println!("Not enough nodes have accepted the update");
     }
+
 }
 
 fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
@@ -80,14 +87,17 @@ fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
     }
 }
 
-pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::State>>) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn update_node(dst_id: &str, state: Arc<AsyncRwLock<state::State>>) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     // TODO: only send partial log rather than the whole log based on what every node needs
-    let s = state.lock().await;
+    let s = state.read().await;
+    let node_id = s.node_id.clone();
     let term = s.get_current_term();
     let entries: Vec<raft::LogEntry> = s.get_log().iter().map(convert_log_entry).collect();
 
     // Get the index and term of the entry preceding new ones
-    let prev_log_index = if s.get_log().is_empty() { 0 } else { (s.get_log().len() - 1) as u32 };
+    // let prev_log_index = if s.get_log().is_empty() { 0 } else { (s.get_log().len() - 1) as u32 };
+    // TODO: with partial log this can be larger
+    let prev_log_index = 0;
     let prev_log_term = if prev_log_index == 0 { 0 } else { s.get_log()[prev_log_index as usize - 1].term };
     let leader_commit = s.volatile.commit_index;
     drop(s);  // release lock before network call
@@ -97,7 +107,7 @@ pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::St
 
     let request = tonic::Request::new(AppendEntriesRequest {
         term,
-        leader_id: id.to_string(),
+        leader_id: node_id,
         prev_log_index,
         prev_log_term,
         entries,

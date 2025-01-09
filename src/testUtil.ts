@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { RaftNode } from './api';
 
 export interface RaftNodeProcesses {
+    id: number,
     started: Promise<void>,
     leader: Promise<void>,
     exit: () => Promise<void>,
@@ -20,6 +21,7 @@ export function startRaftNode(index: number, numNodes: number): RaftNodeProcesse
     });
 
     return {
+        id: index,
         started: new Promise<void>(resolve => {
             let webServerStarted = false;
             let rpcServerStarted = false;

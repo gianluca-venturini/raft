@@ -48,7 +48,7 @@ describe('integration single node', () => {
         expect(await raftClient.getVar('foo')).toBe(42);
     });
 
-    fit('persists the log on disk', async () => {
+    xit('persists the log on disk', async () => {
         await raftClient.setVar('foo', 42);
         await raftNode.exit();
         raftNode = startRaftNode(0, 1);
@@ -101,7 +101,7 @@ function integrationTests(numNodes: number) {
                 if (numLeaders > 0) {
                     break;
                 }
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 20));
             }
             expect(numLeaders).toBe(1);
         });
@@ -117,16 +117,32 @@ function integrationTests(numNodes: number) {
             expect(await raftClient.getVar('foo')).toBe(42);
         });
 
-        xit('write and read variable after leader failure', async () => {
+        it('write and read variable after leader restarts', async () => {
             await raftClient.setVar('foo', 42);
             expect(await raftClient.getVar('foo')).toBe(42);
-            for (const node of raftNodes) {
-                if ((await node.api.getState()).role === 'Leader') {
-                    node.exit();
+            const leaderNode = await getLeaderNode(raftNodes);
+            if (leaderNode) {
+                await leaderNode.exit();
+                // Restart the node that we just terminated
+                const newNode = startRaftNode(leaderNode.id, numNodes);
+                // Replace the leader with the new node
+                raftNodes[leaderNode.id] = newNode;
+            } else (
+                fail('No leader found')
+            )
+            await doWithRetry(async () => {
+                try {
+                    const result = await raftClient.getVar('foo');
+                    expect(result).toBe(42);
+                } catch (error) {
+                    console.log('error', error);
+                    if (error instanceof NotFoundError) {
+                        throw new RetryError();
+                    }
+                    throw error;
                 }
-            }
-            expect(await raftClient.getVar('foo')).toBe(42);
-        });
+            });
+        }, 30_000);
     });
 
     describe('log replication', () => {

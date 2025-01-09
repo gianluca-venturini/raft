@@ -81,25 +81,33 @@ pub struct State {
     pub last_received_heartbeat_timestamp_ms: u128,
     /** Ids of the other nodes of the ring */
     pub node_ids: Vec<String>,
+    /** Id of the current node */
+    pub node_id: String,
 }
 
 impl State {
     pub fn apply_committed(&mut self) {
         while self.volatile.last_applied < self.volatile.commit_index {
-            let next_index = self.volatile.last_applied as usize;
-            if let Some(entry) = self.persisted.log.get(next_index) {
+            let next_index = (self.volatile.last_applied + 1) as usize;
+            if let Some(entry) = self.persisted.log.get((next_index as u32 - 1) as usize) {
+                println!("Applying committed log entry: {}", next_index);
                 match &entry.command {
                     Command::WriteVar { name, value } => {
+                        println!("Applying committed write: {} = {}", name, value);
                         self.state_machine.vars.insert(name.clone(), *value);
                     }
                     Command::DeleteVar { name } => {
-                        self.state_machine.vars.remove(name);
+                        println!("Applying committed delete: {}", name);
+                        self.state_machine.vars.remove(&name.clone());
                     }
-                    Command::Noop => {}
+                    Command::Noop => {
+                        println!("Applying noop");
+                    }
                 }
-                self.volatile.last_applied += 1;
+                self.volatile.last_applied = next_index as u32;
             }
         }
+        println!("Applied committed entries up to index {}", self.volatile.last_applied);
     }
 
     pub fn get_current_term(&self) -> u32 {
@@ -206,7 +214,7 @@ impl State {
     }
 }
 
-pub fn init_state(num_nodes: u16, storage_path: Option<String>) -> State {
+pub fn init_state(num_nodes: u16, node_id: &str, storage_path: Option<String>) -> State {
     let mut state = State::default();
     state.storage_path = storage_path.map(PathBuf::from);
     
@@ -226,6 +234,7 @@ pub fn init_state(num_nodes: u16, storage_path: Option<String>) -> State {
         state.node_ids.push(i.to_string());
     }
     state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
+    state.node_id = node_id.to_string();
     state
 }
 
@@ -234,27 +243,29 @@ mod tests {
 
     #[test]
     fn test_init_state_empty() {
-        let state = init_state(0, None);
+        let state = init_state(0, "0", None);
         assert_eq!(state.get_current_term(), 0);
         assert_eq!(state.volatile.commit_index, 0);
         assert_eq!(state.volatile.last_applied, 0);
         assert_eq!(state.state_machine.vars.len(), 0);
         assert_eq!(state.node_ids.len(), 0);
         assert_eq!(state.role, Role::Follower);
+        assert_eq!(state.node_id, "0");
     }
 
     #[test]
     fn test_init_node_ids() {
-        let state = init_state(3, None);
+        let state = init_state(3, "0", None);
         assert_eq!(state.node_ids.len(), 3);
         assert_eq!(state.node_ids[0], "0");
         assert_eq!(state.node_ids[1], "1");
         assert_eq!(state.node_ids[2], "2");
+        assert_eq!(state.node_id, "0");
     }
 
     #[test]
     fn test_apply_committed_write() {
-        let mut state = init_state(1, None);
+        let mut state = init_state(1, "0", None);
         state.append_log_entry(LogEntry {
             term: 1,
             command: Command::WriteVar {
@@ -263,6 +274,8 @@ mod tests {
             },
         });
         state.volatile.commit_index = 1;
+
+        assert_eq!(state.volatile.last_applied, 0);
         
         state.apply_committed();
         
@@ -272,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_override_committed_write() {
-        let mut state = init_state(1, None);
+        let mut state = init_state(1, "0", None);
         state.append_log_entry(LogEntry {
             term: 1,
             command: Command::WriteVar {

@@ -28,8 +28,10 @@ yarn test-integration
 
 ## TODO:
 - [x] Implement AppendEntries RPC
-- [ ] The leader commits values (sending update to majority of followers) before applying to the state machine
+- [x] The leader commits values (sending update to majority of followers) before applying to the state machine
 - [ ] Store the RPC client in a structure instead of creating a new one every time
+- [ ] The nodes handle "Error: transport error" when nodes are down
+- [ ] Send partial entry updates rather than all entries every time
 
 # Learnings
 - Raft protocol implementation
