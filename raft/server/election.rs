@@ -46,11 +46,12 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
     let (node_ids, current_term) = {
         let mut s = state.lock().await;
 
-        s.persisted.voted_for = Some(node_id.to_string());
-        s.persisted.current_term += 1;
+        s.set_voted_for(Some(node_id.to_string()));
+        let current_term = s.get_current_term();
+        s.set_current_term(current_term + 1);
         s.role = state::Role::Candidate;
 
-        (s.node_ids.clone(), s.persisted.current_term)
+        (s.node_ids.clone(), s.get_current_term())
     };
     let max_term = Arc::new(Mutex::new(0)); // Max term seen in responses
     let votes = Arc::new(Mutex::new(1)); // Vote for self
@@ -92,10 +93,10 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         if *votes.lock().unwrap() > s.node_ids.len() / 2 {
             println!("Elected leader with majority votes");
             s.role = state::Role::Leader;
-            let current_term = s.persisted.current_term;
+            let current_term = s.get_current_term();
             // Push Noop as the first term entry to immediately have an entry for this term to
             // communicate to other nodes
-            s.persisted.log.push(state::LogEntry {
+            s.append_log_entry(state::LogEntry {
                 term: current_term,
                 command: state::Command::Noop,
             });
@@ -123,10 +124,11 @@ pub async fn maybe_attempt_election(state: Arc<AsyncMutex<state::State>>, node_i
         } else {
             println!("Election lost");
             let max_term = max_term.lock().unwrap();
-            if *max_term > s.persisted.current_term {
+            if *max_term > s.get_current_term() {
                 println!("Updating term to {}", *max_term);
-                s.persisted.current_term = max(s.persisted.current_term, *max_term);
-                s.persisted.voted_for = None;
+                let current_term = s.get_current_term();
+                s.set_current_term(max(*max_term, current_term));
+                s.set_voted_for(None);
             }
             println!("Reverting to follower");
             s.role = state::Role::Follower;

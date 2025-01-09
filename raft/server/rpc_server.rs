@@ -50,20 +50,20 @@ impl Raft for MyRaft {
 
         {
             let mut state = self.state.lock().await;
-            // Set the current timestamp as the last received heartbeat timestamp
             state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
             state.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
 
             let prev_log_index = request.get_ref().prev_log_index as usize;
-            if prev_log_index > 0 && state.persisted.log.len() <= prev_log_index - 1 {
+            if prev_log_index > 0 && state.get_log().len() <= prev_log_index - 1 {
                 println!("Append entries failed: log is too small for comparison");
                 reply.success = false;
-            } else if prev_log_index > 0 && state.persisted.log[(prev_log_index - 1) as usize].term != request.get_ref().prev_log_term {
+            } else if prev_log_index > 0 && state.get_log()[(prev_log_index - 1) as usize].term != request.get_ref().prev_log_term {
                 println!("Append entries failed: log term does not match");
                 reply.success = false;
             } else {
                 println!("Append entries succeeded");
-                state.persisted.log = state.persisted.log[..prev_log_index].to_vec();
+                // Note: We need to add a new method to State to handle this log truncation
+                state.truncate_log(prev_log_index);
                 
                 let entries: Vec<state::LogEntry> = request
                     .get_ref()
@@ -72,13 +72,16 @@ impl Raft for MyRaft {
                     .map(convert_proto_entry)
                     .collect();
                 
-                state.persisted.log.extend(entries);
-                state.persisted.current_term = request.get_ref().term;
+                for entry in entries {
+                    state.append_log_entry(entry);
+                }
+                
+                state.set_current_term(request.get_ref().term);
                 state.volatile.commit_index = request.get_ref().leader_commit;
-                state.applyCommitted();
+                state.apply_committed();
             }
 
-            reply.term = state.persisted.current_term;
+            reply.term = state.get_current_term();
         }
 
         Ok(Response::new(reply))
@@ -96,20 +99,20 @@ impl Raft for MyRaft {
             term: request.get_ref().term,
             vote_granted: true,
         };
-        if request.get_ref().term < s.persisted.current_term {
+        if request.get_ref().term < s.get_current_term() {
             println!("Vote not granted: candidate term is not up to date");
-            reply.term = s.persisted.current_term;
+            reply.term = s.get_current_term();
             reply.vote_granted = false;
         }
-        if s.persisted.voted_for.is_some()
-            && s.persisted.voted_for != Some(request.get_ref().candidate_id.to_string())
+        if s.get_voted_for().is_some()
+            && s.get_voted_for() != Some(request.get_ref().candidate_id.to_string())
         {
             println!("Vote not granted: already voted for another candidate in this term");
             reply.vote_granted = false;
         } else {
             println!("Vote granted");
-            s.persisted.voted_for = Some(request.get_ref().candidate_id.to_string());
-            s.persisted.current_term = request.get_ref().term;
+            s.set_voted_for(Some(request.get_ref().candidate_id.to_string()));
+            s.set_current_term(request.get_ref().term);
         }
 
         Ok(Response::new(reply))

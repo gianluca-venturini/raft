@@ -19,6 +19,47 @@ describe('integration 3 nodes', () => {
 //     integrationTests(101);
 // });
 
+describe('integration single node', () => {
+    let raftNode: RaftNodeProcesses;
+    let raftClient: RaftClient;
+
+    beforeEach(async () => {
+        raftNode = startRaftNode(0, 1);
+        raftClient = new RaftClient({ '0': raftNode.api });
+        // Wait until it's started
+        await raftNode.started;
+    });
+
+    afterEach(async () => {
+        await raftNode.exit();
+    });
+
+    it('elects itself as leader', async () => {
+        await doWithRetry(async () => {
+            const state = await raftNode.api.getState();
+            if (state.role !== 'Leader') {
+                throw new RetryError();
+            }
+        });
+    });
+
+    it('write and read a variable', async () => {
+        await raftClient.setVar('foo', 42);
+        expect(await raftClient.getVar('foo')).toBe(42);
+    });
+
+    fit('persists the log on disk', async () => {
+        await raftClient.setVar('foo', 42);
+        await raftNode.exit();
+        raftNode = startRaftNode(0, 1);
+        await raftNode.started;
+        // Need to wait for the node to become leader to ensure
+        // the log is applied
+        await getLeaderNode([raftNode]);
+        expect(await raftClient.getVar('foo')).toBe(42);
+    });
+});
+
 function integrationTests(numNodes: number) {
     let raftNodes: RaftNodeProcesses[];
     let raftClient: RaftClient;

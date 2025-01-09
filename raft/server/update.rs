@@ -21,7 +21,7 @@ pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &s
     let node_ids = s.node_ids.clone();
     drop(s);  // release lock before spawning threads
 
-    let threads = node_ids
+    let futures = node_ids
         .iter()
         // do not connect to self
         .filter(|id| id != &node_id)
@@ -30,12 +30,29 @@ pub async fn maybe_send_update(state: Arc<AsyncMutex<state::State>>, node_id: &s
             let node_id = node_id.to_string();
             let state = Arc::clone(&state);
             tokio::spawn(async move {
-                let _ = update_node(&id, &node_id, state).await;
+                update_node(&id, &node_id, state).await
             })
-        });
+        })
+        .collect::<Vec<_>>();
 
-    for thread in threads {
-        thread.await.unwrap();
+    let mut successful_responses = 1; // Count self as successful
+    for future in futures {
+        if let Ok(Ok(success)) = future.await {
+            if success {
+                successful_responses += 1;
+            }
+        }
+    }
+
+    // If majority of nodes responded successfully, update commit index
+    {
+        let mut s = state.lock().await;
+        let majority = s.node_ids.len() / 2;
+        if successful_responses > majority {
+            if let Some(last_log_index) = s.get_log().len().checked_sub(1) {
+                s.volatile.commit_index = last_log_index as u32;
+            }
+        }
     }
 }
 
@@ -63,16 +80,15 @@ fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
     }
 }
 
-pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::State>>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::State>>) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     // TODO: only send partial log rather than the whole log based on what every node needs
     let s = state.lock().await;
-    let term = s.persisted.current_term;
-    let entries: Vec<raft::LogEntry> = s.persisted.log.iter().map(convert_log_entry).collect();
+    let term = s.get_current_term();
+    let entries: Vec<raft::LogEntry> = s.get_log().iter().map(convert_log_entry).collect();
 
-    
     // Get the index and term of the entry preceding new ones
-    let prev_log_index = if s.persisted.log.is_empty() { 0 } else { (s.persisted.log.len() - 1) as u32 };
-    let prev_log_term = if prev_log_index == 0 { 0 } else { s.persisted.log[prev_log_index as usize - 1].term };
+    let prev_log_index = if s.get_log().is_empty() { 0 } else { (s.get_log().len() - 1) as u32 };
+    let prev_log_term = if prev_log_index == 0 { 0 } else { s.get_log()[prev_log_index as usize - 1].term };
     let leader_commit = s.volatile.commit_index;
     drop(s);  // release lock before network call
 
@@ -93,5 +109,5 @@ pub async fn update_node(dst_id: &str, id: &str, state: Arc<AsyncMutex<state::St
 
     // TODO: handle rejected updates
 
-    Ok(())
+    Ok(response.get_ref().success)
 }

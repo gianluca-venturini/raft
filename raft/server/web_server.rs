@@ -56,7 +56,19 @@ async fn set_variable(
         return handle_not_leader(&s.volatile.leader_id).await;
     }
 
-    s.state_machine.vars.insert(body.key.clone(), body.value);
+    let entry = state::LogEntry {
+        term: s.get_current_term(),
+        command: state::Command::WriteVar {
+            name: body.key.clone(),
+            value: body.value,
+        },
+    };
+    s.append_log_entry(entry);
+
+    // TODO: only consider committed after the majority of nodes have responded positively to an update
+    s.volatile.commit_index = s.get_log().len() as u32;
+    s.apply_committed();
+    
     println!("Variable set: {} = {}", body.key, body.value);
     let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     response.insert("state", "ok");
@@ -70,7 +82,7 @@ async fn get_state(state: web::Data<Arc<AsyncMutex<state::State>>>) -> HttpRespo
     let s = state.lock().await;
     let response = json!({
         "role": s.role,
-        "log": s.persisted.log,
+        "log": s.get_log(),
     });
     HttpResponse::Ok().json(response)
 }

@@ -1,9 +1,18 @@
 use std::sync::{Arc, RwLock};
+use std::fs::{self, File};
+use std::path::PathBuf;
+use std::io::{self, Write, BufWriter};
+use tempfile::NamedTempFile;
 
 use serde::{Deserialize, Serialize};
 use crate::util::get_current_time_ms;
+use bincode;
 
-#[derive(Clone, Serialize)]
+const CURRENT_TERM_FILE: &str = "current_term.bin";
+const VOTED_FOR_FILE: &str = "voted_for.bin";
+const LOG_FILE: &str = "log.bin";
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Command {
     WriteVar { name: String, value: i32 },
@@ -11,17 +20,17 @@ pub enum Command {
     Noop,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub term: u32,
     pub command: Command,
 }
 
 #[derive(Default, Clone, Serialize)]
-pub struct PersistedState {
-    pub current_term: u32,
-    pub voted_for: Option<String>,
-    pub log: Vec<LogEntry>,
+struct PersistedState {
+    current_term: u32,
+    voted_for: Option<String>,
+    log: Vec<LogEntry>,
 }
 
 #[derive(Default)]
@@ -58,10 +67,11 @@ impl Default for Role {
 
 #[derive(Default)]
 pub struct State {
-    pub persisted: PersistedState,
+    persisted: PersistedState,
     pub volatile: VolatileState,
     pub volatile_leader: Option<VolatileLeaderState>,
     pub state_machine: StateMachine,
+    storage_path: Option<PathBuf>,
 
     // State about the current machine
     /** Role of the node */
@@ -74,7 +84,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn applyCommitted(&mut self) {
+    pub fn apply_committed(&mut self) {
         while self.volatile.last_applied < self.volatile.commit_index {
             let next_index = self.volatile.last_applied as usize;
             if let Some(entry) = self.persisted.log.get(next_index) {
@@ -91,16 +101,132 @@ impl State {
             }
         }
     }
+
+    pub fn get_current_term(&self) -> u32 {
+        self.persisted.current_term
+    }
+
+    pub fn get_voted_for(&self) -> Option<String> {
+        self.persisted.voted_for.clone()
+    }
+
+    pub fn get_log(&self) -> &Vec<LogEntry> {
+        &self.persisted.log
+    }
+
+    pub fn set_current_term(&mut self, term: u32) {
+        self.persisted.current_term = term;
+        if let Err(e) = self.atomic_write_to_file(CURRENT_TERM_FILE, &term.to_le_bytes()) {
+            eprintln!("Failed to persist current_term: {}", e);
+        }
+    }
+
+    pub fn set_voted_for(&mut self, node_id: Option<String>) {
+        self.persisted.voted_for = node_id.clone();
+        let bytes = if let Some(id) = &node_id {
+            id.as_bytes().to_vec()
+        } else {
+            vec![]
+        };
+        if let Err(e) = self.atomic_write_to_file(VOTED_FOR_FILE, &bytes) {
+            eprintln!("Failed to persist voted_for: {}", e);
+        }
+    }
+
+    pub fn append_log_entry(&mut self, entry: LogEntry) {
+        self.persisted.log.push(entry.clone());
+        // TODO: append to log file rather than rewriting the whole log every time
+        if let Ok(serialized) = bincode::serialize(&self.persisted.log) {
+            if let Err(e) = self.atomic_write_to_file(LOG_FILE, &serialized) {
+                eprintln!("Failed to persist log: {}", e);
+            }
+        }
+    }
+
+    pub fn truncate_log(&mut self, index: usize) {
+        self.persisted.log = self.persisted.log[..index].to_vec();
+        if let Ok(serialized) = bincode::serialize(&self.persisted.log) {
+            if let Err(e) = self.atomic_write_to_file(LOG_FILE, &serialized) {
+                eprintln!("Failed to persist log: {}", e);
+            }
+        }
+    }
+
+    fn get_file_path(&self, filename: &str) -> Option<PathBuf> {
+        self.storage_path.as_ref().map(|path| path.join(filename))
+    }
+
+    fn atomic_write_to_file(&self, filename: &str, content: &[u8]) -> io::Result<()> {
+        if let Some(file_path) = self.get_file_path(filename) {
+            let dir = file_path.parent().ok_or(io::Error::new(
+                io::ErrorKind::Other,
+                "Invalid path",
+            ))?;
+
+            let mut temp_file = NamedTempFile::new_in(dir)?;
+            temp_file.write_all(content)?;
+            temp_file.flush()?;
+            temp_file.persist(file_path)?;
+        }
+        Ok(())
+    }
+
+    fn read_from_file(&self, filename: &str) -> io::Result<Vec<u8>> {
+        match self.get_file_path(filename) {
+            Some(file_path) => fs::read(file_path),
+            None => Ok(vec![])
+        }
+    }
+
+    fn load_persisted_state(&mut self) -> io::Result<()> {
+        // Load current_term
+        if let Ok(bytes) = self.read_from_file(CURRENT_TERM_FILE) {
+            if bytes.len() == 4 {
+                let mut arr = [0u8; 4];
+                arr.copy_from_slice(&bytes);
+                self.persisted.current_term = u32::from_le_bytes(arr);
+            }
+        }
+
+        // Load voted_for
+        if let Ok(bytes) = self.read_from_file(VOTED_FOR_FILE) {
+            if !bytes.is_empty() {
+                self.persisted.voted_for = Some(String::from_utf8_lossy(&bytes).to_string());
+            }
+        }
+
+        // Load log
+        if let Ok(bytes) = self.read_from_file(LOG_FILE) {
+            if let Ok(log) = bincode::deserialize(&bytes) {
+                self.persisted.log = log;
+            }
+        }
+
+        Ok(())
+    }
 }
 
-pub fn init_state(num_nodes: u16) -> State {
+pub fn init_state(num_nodes: u16, storage_path: Option<String>) -> State {
     let mut state = State::default();
+    state.storage_path = storage_path.map(PathBuf::from);
+    
+    // Create storage directory if needed
+    if let Some(path) = &state.storage_path {
+        if let Err(e) = fs::create_dir_all(path) {
+            eprintln!("Failed to create storage directory: {}", e);
+        }
+    }
+
+    // Load persisted state if available
+    if let Err(e) = state.load_persisted_state() {
+        eprintln!("Failed to load persisted state: {}", e);
+    }
+
     for i in 0..num_nodes {
         state.node_ids.push(i.to_string());
     }
-    // Initialize to now to avoid immediate election
     state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
-    return state;
+    state
 }
 
 mod tests {
@@ -108,8 +234,8 @@ mod tests {
 
     #[test]
     fn test_init_state_empty() {
-        let state = init_state(0);
-        assert_eq!(state.persisted.current_term, 0);
+        let state = init_state(0, None);
+        assert_eq!(state.get_current_term(), 0);
         assert_eq!(state.volatile.commit_index, 0);
         assert_eq!(state.volatile.last_applied, 0);
         assert_eq!(state.state_machine.vars.len(), 0);
@@ -119,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_init_node_ids() {
-        let state = init_state(3);
+        let state = init_state(3, None);
         assert_eq!(state.node_ids.len(), 3);
         assert_eq!(state.node_ids[0], "0");
         assert_eq!(state.node_ids[1], "1");
@@ -128,8 +254,8 @@ mod tests {
 
     #[test]
     fn test_apply_committed_write() {
-        let mut state = init_state(1);
-        state.persisted.log.push(LogEntry {
+        let mut state = init_state(1, None);
+        state.append_log_entry(LogEntry {
             term: 1,
             command: Command::WriteVar {
                 name: "a".to_string(),
@@ -138,7 +264,7 @@ mod tests {
         });
         state.volatile.commit_index = 1;
         
-        state.applyCommitted();
+        state.apply_committed();
         
         assert_eq!(state.volatile.last_applied, 1);
         assert_eq!(state.state_machine.vars.get("a"), Some(&1));
@@ -146,31 +272,29 @@ mod tests {
 
     #[test]
     fn test_override_committed_write() {
-        let mut state = init_state(1);
-        state.persisted.log.extend(vec![
-            LogEntry {
-                term: 1,
-                command: Command::WriteVar {
-                    name: "a".to_string(),
-                    value: 1,
-                },
+        let mut state = init_state(1, None);
+        state.append_log_entry(LogEntry {
+            term: 1,
+            command: Command::WriteVar {
+                name: "a".to_string(),
+                value: 1,
             },
-            LogEntry {
-                term: 1,
-                command: Command::WriteVar {
-                    name: "a".to_string(),
-                    value: 2,
-                },
+        });
+        state.append_log_entry(LogEntry {
+            term: 1,
+            command: Command::WriteVar {
+                name: "a".to_string(),
+                value: 2,
             },
-        ]);
+        });
         
         state.volatile.commit_index = 1;
-        state.applyCommitted();
+        state.apply_committed();
         assert_eq!(state.volatile.last_applied, 1);
         assert_eq!(state.state_machine.vars.get("a"), Some(&1));
         
         state.volatile.commit_index = 2;
-        state.applyCommitted();
+        state.apply_committed();
         assert_eq!(state.volatile.last_applied, 2);
         assert_eq!(state.state_machine.vars.get("a"), Some(&2));
         

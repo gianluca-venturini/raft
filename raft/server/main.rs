@@ -46,7 +46,8 @@ async fn main() {
         "NUM_NODES (total number of raft nodes) environment variable is not set or cannot be read",
     ).parse()
     .expect("NUM_NODES must be an integer");
-    let state = Arc::new(AsyncMutex::new(state::init_state(num_nodes)));
+    let storage_path = env::var_os("STORAGE_PATH").map(|p| p.into_string().unwrap());
+    let state = Arc::new(AsyncMutex::new(state::init_state(num_nodes, storage_path)));
 
     spawn_timer(state.clone(), &id);
 
