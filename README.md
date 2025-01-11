@@ -32,6 +32,7 @@ yarn test-integration
 - [ ] Store the RPC client in a structure instead of creating a new one every time
 - [ ] The nodes handle "Error: transport error" when nodes are down
 - [ ] Send partial entry updates rather than all entries every time
+- [ ] Depose leader when AppendEntries returns a higer term
 
 # Learnings
 - Raft protocol implementation

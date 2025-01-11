@@ -12,7 +12,7 @@ const CURRENT_TERM_FILE: &str = "current_term.bin";
 const VOTED_FOR_FILE: &str = "voted_for.bin";
 const LOG_FILE: &str = "log.bin";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Command {
     WriteVar { name: String, value: i32 },
@@ -20,7 +20,7 @@ pub enum Command {
     Noop,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LogEntry {
     pub term: u32,
     pub command: Command,

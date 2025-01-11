@@ -43,46 +43,21 @@ impl Raft for MyRaft {
     ) -> Result<Response<AppendEntriesResponse>, Status> {
         println!("append_entries request={:?}", request);
 
-        let mut reply = raft::AppendEntriesResponse {
-            term: 0,
-            success: true,
+        let mut s = self.state.write().await;
+        let (success, term) = maybe_append_entries(
+            &mut s,
+            request.get_ref().term,
+            &request.get_ref().leader_id,
+            &request.get_ref().entries,
+            request.get_ref().prev_log_index,
+            request.get_ref().prev_log_term,
+            request.get_ref().leader_commit
+        );
+
+        let reply = raft::AppendEntriesResponse {
+            term,
+            success,
         };
-
-        {
-            let mut state = self.state.write().await;
-            state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
-            state.volatile.leader_id = Some(request.get_ref().leader_id.to_string());
-
-            let prev_log_index = request.get_ref().prev_log_index as usize;
-            if prev_log_index > 0 && state.get_log().len() <= prev_log_index - 1 {
-                println!("Append entries failed: log is too small for comparison");
-                reply.success = false;
-            } else if prev_log_index > 0 && state.get_log()[(prev_log_index - 1) as usize].term != request.get_ref().prev_log_term {
-                println!("Append entries failed: log term does not match");
-                reply.success = false;
-            } else {
-                println!("Append entries succeeded");
-                // Note: We need to add a new method to State to handle this log truncation
-                state.truncate_log(prev_log_index);
-                
-                let entries: Vec<state::LogEntry> = request
-                    .get_ref()
-                    .entries
-                    .iter()
-                    .map(convert_proto_entry)
-                    .collect();
-                
-                for entry in entries {
-                    state.append_log_entry(entry);
-                }
-                
-                state.set_current_term(request.get_ref().term);
-                state.volatile.commit_index = request.get_ref().leader_commit;
-                state.apply_committed();
-            }
-
-            reply.term = state.get_current_term();
-        }
 
         Ok(Response::new(reply))
     }
@@ -140,4 +115,350 @@ pub async fn start_rpc_server(
     send_future.await?;
 
     Ok(())
+}
+
+fn maybe_append_entries(
+    state: &mut state::State,
+    term: u32,
+    leader_id: &str,
+    entries: &Vec<raft::LogEntry>,
+    prev_log_index: u32,
+    prev_log_term: u32,
+    leader_commit: u32
+) -> (bool, u32) {
+    state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
+    state.volatile.leader_id = Some(leader_id.to_string());
+
+    let prev_log_index = prev_log_index as usize;
+    if prev_log_index > 0 && state.get_log().len() <= prev_log_index - 1 {
+        println!("Append entries failed: log is too small for comparison");
+        return (false, state.get_current_term());
+    } else if prev_log_index > 0 && state.get_log()[(prev_log_index - 1) as usize].term != prev_log_term {
+        println!("Append entries failed: log term does not match");
+        return (false, state.get_current_term());
+    } else {
+        println!("Append entries succeeded");
+        state.truncate_log(prev_log_index);
+        
+        let log_entries: Vec<state::LogEntry> = entries
+            .iter()
+            .map(convert_proto_entry)
+            .collect();
+        
+        for entry in log_entries {
+            state.append_log_entry(entry);
+        }
+        
+        state.set_current_term(term);
+        state.volatile.commit_index = leader_commit;
+        state.apply_committed();
+    }
+
+    (true, state.get_current_term())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_maybe_append_entries_success_on_empty() {
+        let mut state = state::State::default();
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 1,
+                command: Some(raft::log_entry::Command::Noop(raft::Noop {})),
+            }
+        ];
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            1,
+            "0",
+            &entries,
+            0,
+            0,
+            0
+        );
+        
+        assert!(success);
+        assert_eq!(term, 1);
+        assert_eq!(state.get_log().len(), 1);
+        assert_eq!(state.get_log()[0].command, state::Command::Noop);
+    }
+
+    #[test]
+    fn test_maybe_append_entries_success_on_entry_same_term() {
+        let mut state = state::State::default();
+        state.append_log_entry(state::LogEntry {
+            term: 1,
+            command: state::Command::WriteVar {
+                name: "x".to_string(),
+                value: 1,
+            },
+        });
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 1,
+                command: Some(raft::log_entry::Command::WriteVar(raft::WriteVar {
+                    name: "y".to_string(),
+                    value: 1,
+                })),
+            }
+        ];
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            1,
+            "0",
+            &entries,
+            1,
+            1,
+            0
+        );
+        
+        assert!(success);
+        assert_eq!(term, 1);
+        assert_eq!(state.get_log().len(), 2);
+        assert_eq!(state.get_log()[0].command, state::Command::WriteVar {
+            name: "x".to_string(),
+            value: 1,
+        });
+        assert_eq!(state.get_log()[1].command, state::Command::WriteVar {
+            name: "y".to_string(),
+            value: 1,
+        });
+    }
+
+    #[test]
+    fn test_maybe_append_entries_success_on_entry_different_term() {
+        let mut state = state::State::default();
+        state.append_log_entry(state::LogEntry {
+            term: 1,
+            command: state::Command::WriteVar {
+                name: "x".to_string(),
+                value: 1,
+            },
+        });
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 3,
+                command: Some(raft::log_entry::Command::WriteVar(raft::WriteVar {
+                    name: "y".to_string(),
+                    value: 1,
+                })),
+            }
+        ];
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            3,
+            "0",
+            &entries,
+            1,
+            1,
+            0
+        );
+        
+        assert!(success);
+        assert_eq!(term, 3);
+        assert_eq!(state.volatile.commit_index, 0);
+        assert_eq!(state.get_log().len(), 2);
+        assert_eq!(state.get_log()[0].term, 1);
+        assert_eq!(state.get_log()[1].term, 3);
+        assert_eq!(state.get_log()[0].command, state::Command::WriteVar {
+            name: "x".to_string(),
+            value: 1,
+        });
+        assert_eq!(state.get_log()[1].command, state::Command::WriteVar {
+            name: "y".to_string(),
+            value: 1,
+        });
+    }
+
+    #[test]
+    fn test_maybe_append_entries_success_commit() {
+        let mut state = state::State::default();
+        state.append_log_entry(state::LogEntry {
+            term: 1,
+            command: state::Command::WriteVar {
+                name: "x".to_string(),
+                value: 1,
+            },
+        });
+
+        // No new entry is been appended
+        let entries = vec![];
+
+        assert_eq!(state.volatile.commit_index, 0);
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            1,
+            "0",
+            &entries,
+            1,
+            1,
+            // The entry already in the log is now committed
+            1
+        );
+        
+        assert!(success);
+        assert_eq!(term, 1);
+        assert_eq!(state.volatile.commit_index, 1);
+    }
+
+    #[test]
+    fn test_maybe_append_entries_success_append_commit() {
+        let mut state = state::State::default();
+        state.append_log_entry(state::LogEntry {
+            term: 1,
+            command: state::Command::WriteVar {
+                name: "x".to_string(),
+                value: 1,
+            },
+        });
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 3,
+                command: Some(raft::log_entry::Command::WriteVar(raft::WriteVar {
+                    name: "y".to_string(),
+                    value: 1,
+                })),
+            }
+        ];
+
+        assert_eq!(state.volatile.commit_index, 0);
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            3,
+            "0",
+            &entries,
+            1,
+            1,
+            // The entry that is being appended is alrady committed
+            // e.g. the majority of the other followers already successfully appended it
+            2
+        );
+        
+        assert!(success);
+        assert_eq!(term, 3);
+        assert_eq!(state.volatile.commit_index, 2);
+    }
+
+    #[test]
+    fn test_maybe_append_entries_failure_empty() {
+        let mut state = state::State::default();
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 3,
+                command: Some(raft::log_entry::Command::WriteVar(raft::WriteVar {
+                    name: "y".to_string(),
+                    value: 1,
+                })),
+            }
+        ];
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            3,
+            "0",
+            &entries,
+            1,
+            1,
+            0
+        );
+        
+        // Should not succeed because the log doesn't contain the prev_log_index
+        assert!(!success);
+        assert_eq!(term, 0);
+        assert_eq!(state.get_log().len(), 0);
+        assert_eq!(state.volatile.commit_index, 0);
+    }
+
+    #[test]
+    fn test_maybe_append_entries_failure_prev_index_not_in_log() {
+        let mut state = state::State::default();
+        state.set_current_term(1);
+        state.append_log_entry(state::LogEntry {
+            term: 1,
+            command: state::Command::WriteVar {
+                name: "x".to_string(),
+                value: 1,
+            },
+        });
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 3,
+                command: Some(raft::log_entry::Command::WriteVar(raft::WriteVar {
+                    name: "y".to_string(),
+                    value: 1,
+                })),
+            }
+        ];
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            3,
+            "0",
+            &entries,
+            2,
+            1,
+            0
+        );
+        
+        // Should not succeed because the log doesn't contain the prev_log_index
+        assert!(!success);
+        assert_eq!(term, 1);
+        assert_eq!(state.get_log().len(), 1);
+        assert_eq!(state.volatile.commit_index, 0);
+    }
+
+    #[test]
+    fn test_maybe_append_entries_failure_prev_term_different() {
+        let mut state = state::State::default();
+        state.set_current_term(1);
+        state.append_log_entry(state::LogEntry {
+            term: 1,
+            command: state::Command::WriteVar {
+                name: "x".to_string(),
+                value: 1,
+            },
+        });
+        
+        let entries = vec![
+            raft::LogEntry {
+                term: 3,
+                command: Some(raft::log_entry::Command::WriteVar(raft::WriteVar {
+                    name: "y".to_string(),
+                    value: 1,
+                })),
+            }
+        ];
+        
+        let (success, term) = maybe_append_entries(
+            &mut state,
+            3,
+            "0",
+            &entries,
+            1,
+            2,
+            0
+        );
+        
+        // Should not succeed because the log contains the log index, but the term is different
+        assert!(!success);
+        assert_eq!(term, 1);
+        assert_eq!(state.get_log().len(), 1);
+        assert_eq!(state.volatile.commit_index, 0);
+    }
+
+    // TODO: add tests for success where leader is not up to date (i.e. do not update current follower term)
 }
