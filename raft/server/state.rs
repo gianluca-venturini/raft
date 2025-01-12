@@ -1,3 +1,4 @@
+use std::collections::HashMap; // Add this import
 use std::fs::{self};
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -41,9 +42,9 @@ pub struct VolatileState {
 }
 
 #[derive(Default)]
-struct VolatileLeaderState {
-    pub next_index: Vec<u32>,
-    pub match_index: Vec<u32>,
+pub struct VolatileLeaderState {
+    pub next_index: HashMap<String, u32>,
+    pub match_index: HashMap<String, u32>,
 }
 
 #[derive(Default)]
@@ -237,6 +238,18 @@ pub fn init_state(num_nodes: u16, node_id: &str, storage_path: Option<String>) -
     state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
     state.node_id = node_id.to_string();
     state
+}
+
+pub fn init_leader_state(state: &mut State) {
+    state.role = Role::Leader;
+    state.volatile_leader = Some(VolatileLeaderState::default());
+    state.volatile_leader.as_mut().unwrap().next_index = state
+        .node_ids
+        .iter()
+        .map(|id| (id.clone(), state.get_log().len() as u32 + 1))
+        .collect();
+    state.volatile_leader.as_mut().unwrap().match_index =
+        state.node_ids.iter().map(|id| (id.clone(), 0)).collect();
 }
 
 mod tests {

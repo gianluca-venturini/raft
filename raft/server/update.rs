@@ -24,7 +24,7 @@ pub async fn maybe_send_update(state: Arc<AsyncRwLock<state::State>>) {
         .map(|id| {
             let id = id.to_string();
             let state = Arc::clone(&state);
-            tokio::spawn(async move { update_node(&id, state).await })
+            tokio::spawn(async move { send_update_node(&id, state).await })
         })
         .collect::<Vec<_>>();
 
@@ -76,7 +76,7 @@ fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
     }
 }
 
-pub async fn update_node(
+pub async fn send_update_node(
     dst_id: &str,
     state: Arc<AsyncRwLock<state::State>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
@@ -112,11 +112,119 @@ pub async fn update_node(
         entries,
         leader_commit,
     });
+    let request = request.get_ref();
 
-    let response = client.append_entries(request).await?;
+    let response = client.append_entries(request.clone()).await?;
+    let response = response.get_ref();
     println!("response={:?}", response);
 
-    // TODO: handle rejected updates
+    {
+        let mut s = state.write().await;
+        update_leader_state(&dst_id, &mut s, &request, &response).await;
+    }
 
-    Ok(response.get_ref().success)
+    Ok(response.success)
+}
+
+/** Update the current leader node state  */
+pub async fn update_leader_state(
+    dst_id: &str,
+    state: &mut state::State,
+    request: &raft::AppendEntriesRequest,
+    response: &raft::AppendEntriesResponse,
+) {
+    if !response.success {
+        if response.term > state.get_current_term() {
+            state.role = state::Role::Follower;
+            state.set_current_term(response.term);
+            state.volatile_leader = None;
+        }
+        // TODO: implement all the other cases
+    }
+    if response.success {
+        if let Some(leader_state) = &mut state.volatile_leader {
+            leader_state.match_index.insert(
+                dst_id.to_string(),
+                request.prev_log_index + request.entries.len() as u32,
+            );
+        }
+        // TODO: implement all the other cases
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use state::init_leader_state;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_update_leader_state_deposed() {
+        let mut state = state::init_state(3, "0", None);
+        init_leader_state(&mut state);
+        state.role = state::Role::Leader;
+        state.set_current_term(1);
+
+        let response = raft::AppendEntriesResponse {
+            term: 2,
+            success: false,
+        };
+
+        let request = tonic::Request::new(AppendEntriesRequest {
+            term: 0,
+            leader_id: "0".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            entries: vec![],
+            leader_commit: 0,
+        });
+        let request = request.get_ref();
+        update_leader_state(&"2", &mut state, &request, &response).await;
+
+        // If the response term is higher, the node should step down from leader
+        assert_eq!(state.role, state::Role::Follower);
+        assert_eq!(state.get_current_term(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_update_leader_state_success() {
+        let mut state = state::init_state(3, "0", None);
+        init_leader_state(&mut state);
+        state.role = state::Role::Leader;
+        state.set_current_term(1);
+
+        let response = raft::AppendEntriesResponse {
+            term: 1,
+            success: true,
+        };
+
+        let request = tonic::Request::new(AppendEntriesRequest {
+            term: 0,
+            leader_id: "0".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            entries: vec![raft::LogEntry {
+                term: 1,
+                command: Some(raft::log_entry::Command::Noop(raft::Noop {})),
+            }],
+            leader_commit: 0,
+        });
+        let request = request.get_ref();
+
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().match_index.get("2"),
+            // Before the update the leader believes node 2 has no log entries
+            Some(&0)
+        );
+
+        update_leader_state(&"2", &mut state, &request, &response).await;
+
+        assert_eq!(state.role, state::Role::Leader);
+        assert_eq!(state.get_current_term(), 1);
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().match_index.get("2"),
+            // After the update the leader believes node 2 has one log entry
+            Some(&1)
+        );
+    }
 }

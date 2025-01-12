@@ -1,4 +1,4 @@
-use super::update::update_node;
+use super::update::send_update_node;
 use once_cell::sync::Lazy;
 use raft::raft_client::RaftClient;
 use raft::RequestVoteRequest;
@@ -115,7 +115,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
                     println!("Sending update to all nodes to enstablish leadership");
                     tokio::spawn(async move {
                         // Send updates to all nodes to inform them of the new leader
-                        let _ = update_node(&id, state).await;
+                        let _ = send_update_node(&id, state).await;
                     })
                 });
 
