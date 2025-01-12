@@ -4,11 +4,12 @@ FROM debian:bookworm-slim
 # Install required dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ca-certificates \
     build-essential \
-    protobuf-compiler \
-    nodejs=18.19.0+dfsg-6~deb12u2 \
-    npm=9.2.0~ds1-1 && \
+    protobuf-compiler && \
     apt-get clean && \
+    curl --proto '=https' --tlsv1.2 -sSf https://deb.nodesource.com/setup_22.x | bash && \
+    apt-get install -y nodejs=22.13.0-1nodesource1 && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     npm install -g yarn@1.22.17
 
