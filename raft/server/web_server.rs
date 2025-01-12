@@ -1,6 +1,6 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::env;
 use std::sync::Arc;
 use tokio::sync::RwLock as AsyncRwLock;
@@ -57,7 +57,7 @@ async fn set_variable(
         if s.role != state::Role::Leader {
             return handle_not_leader(&s.volatile.leader_id).await;
         }
-    
+
         let entry = state::LogEntry {
             term: s.get_current_term(),
             command: state::Command::WriteVar {
@@ -70,14 +70,14 @@ async fn set_variable(
 
     maybe_send_update(state.get_ref().clone()).await;
     // TODO: do not return until the update has been sent to a majority of nodes and is committed
-    
+
     println!("Variable set: {} = {}", body.key, body.value);
     let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     response.insert("state", "ok");
     HttpResponse::Ok().json(response)
 }
 
-/** Retrieve a summary of the state of raft node 
+/** Retrieve a summary of the state of raft node
  * only use this for debugging purposes
  */
 async fn get_state(state: web::Data<Arc<AsyncRwLock<state::State>>>) -> HttpResponse {

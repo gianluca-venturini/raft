@@ -1,14 +1,14 @@
+use super::update::update_node;
+use once_cell::sync::Lazy;
 use raft::raft_client::RaftClient;
-use raft::{AppendEntriesRequest, RequestVoteRequest};
+use raft::RequestVoteRequest;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::cmp::max;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock as AsyncRwLock;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use once_cell::sync::Lazy;
-use super::update::update_node;
 
-use crate::{state, util::get_current_time_ms, rpc_util::calculate_rpc_server_dst};
+use crate::{rpc_util::calculate_rpc_server_dst, state, util::get_current_time_ms};
 
 pub mod raft {
     tonic::include_proto!("raft");
@@ -119,7 +119,6 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
                     })
                 });
 
-                
             for thread in threads {
                 thread.await.unwrap();
             }

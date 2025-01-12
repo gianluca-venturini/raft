@@ -1,12 +1,11 @@
-use std::sync::{Arc, RwLock};
-use std::fs::{self, File};
+use std::fs::{self};
+use std::io::{self, Write};
 use std::path::PathBuf;
-use std::io::{self, Write, BufWriter};
 use tempfile::NamedTempFile;
 
-use serde::{Deserialize, Serialize};
 use crate::util::get_current_time_ms;
 use bincode;
+use serde::{Deserialize, Serialize};
 
 const CURRENT_TERM_FILE: &str = "current_term.bin";
 const VOTED_FOR_FILE: &str = "voted_for.bin";
@@ -107,7 +106,10 @@ impl State {
                 self.volatile.last_applied = next_index as u32;
             }
         }
-        println!("Applied committed entries up to index {}", self.volatile.last_applied);
+        println!(
+            "Applied committed entries up to index {}",
+            self.volatile.last_applied
+        );
     }
 
     pub fn get_current_term(&self) -> u32 {
@@ -166,10 +168,9 @@ impl State {
 
     fn atomic_write_to_file(&self, filename: &str, content: &[u8]) -> io::Result<()> {
         if let Some(file_path) = self.get_file_path(filename) {
-            let dir = file_path.parent().ok_or(io::Error::new(
-                io::ErrorKind::Other,
-                "Invalid path",
-            ))?;
+            let dir = file_path
+                .parent()
+                .ok_or(io::Error::new(io::ErrorKind::Other, "Invalid path"))?;
 
             let mut temp_file = NamedTempFile::new_in(dir)?;
             temp_file.write_all(content)?;
@@ -182,7 +183,7 @@ impl State {
     fn read_from_file(&self, filename: &str) -> io::Result<Vec<u8>> {
         match self.get_file_path(filename) {
             Some(file_path) => fs::read(file_path),
-            None => Ok(vec![])
+            None => Ok(vec![]),
         }
     }
 
@@ -217,7 +218,7 @@ impl State {
 pub fn init_state(num_nodes: u16, node_id: &str, storage_path: Option<String>) -> State {
     let mut state = State::default();
     state.storage_path = storage_path.map(PathBuf::from);
-    
+
     // Create storage directory if needed
     if let Some(path) = &state.storage_path {
         if let Err(e) = fs::create_dir_all(path) {
@@ -276,9 +277,9 @@ mod tests {
         state.volatile.commit_index = 1;
 
         assert_eq!(state.volatile.last_applied, 0);
-        
+
         state.apply_committed();
-        
+
         assert_eq!(state.volatile.last_applied, 1);
         assert_eq!(state.state_machine.vars.get("a"), Some(&1));
     }
@@ -300,16 +301,15 @@ mod tests {
                 value: 2,
             },
         });
-        
+
         state.volatile.commit_index = 1;
         state.apply_committed();
         assert_eq!(state.volatile.last_applied, 1);
         assert_eq!(state.state_machine.vars.get("a"), Some(&1));
-        
+
         state.volatile.commit_index = 2;
         state.apply_committed();
         assert_eq!(state.volatile.last_applied, 2);
         assert_eq!(state.state_machine.vars.get("a"), Some(&2));
-        
     }
 }
