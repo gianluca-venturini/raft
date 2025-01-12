@@ -81,7 +81,7 @@ function integrationTests(numNodes: number) {
     });
 
     describe('leader election', () => {
-        fit('all nodes are followers at the beginning', async () => {
+        it('all nodes are followers at the beginning', async () => {
             for (const node of raftNodes) {
                 console.log('testing node');
                 const state = await node.api.getState();

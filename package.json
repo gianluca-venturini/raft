@@ -31,7 +31,7 @@
     "build-raft-server": "cd raft/server && cargo build --bin raft_server",
     "info-rust": "rustup --version && cargo --version && rustc --version",
     "start": "node dist/bundle.js",
-    "start-raft-server": "./raft/target/debug/raft_server",
+    "start-raft-server": "exec ./raft/target/debug/raft_server",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write",
     "test-raft": "cd raft/server && cargo test",
     "test-integration": "jest",
