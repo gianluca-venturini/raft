@@ -44,6 +44,14 @@ impl Raft for MyRaft {
         println!("append_entries request={:?}", request);
 
         let mut s = self.state.write().await;
+
+        if s.role == state::Role::Leader && s.get_current_term() < request.get_ref().term {
+            // The current leader has been deposed by a leader node with a higher term
+            s.role = state::Role::Follower;
+        }
+
+        s.last_heartbeat_timestamp_ms = get_current_time_ms();
+
         let (success, term) = maybe_append_entries(
             &mut s,
             request.get_ref().term,
@@ -66,6 +74,10 @@ impl Raft for MyRaft {
         println!("request_vote request={:?}", request);
 
         let mut s = self.state.write().await;
+
+        // Resetting the heartbeat is useful to minimize the candidates at the same time
+        s.last_heartbeat_timestamp_ms = get_current_time_ms();
+
         let (term, vote_granted) = calculate_vote(
             &mut s,
             request.get_ref().term,
@@ -109,7 +121,6 @@ fn maybe_append_entries(
     prev_log_term: u32,
     leader_commit: u32,
 ) -> (bool, u32) {
-    state.last_heartbeat_timestamp_ms = get_current_time_ms();
     state.volatile.leader_id = Some(leader_id.to_string());
 
     if term < state.get_current_term() {
@@ -161,6 +172,8 @@ fn calculate_vote(
         println!("Vote not granted: already voted for another candidate in this term");
         return (candidate_term, false);
     }
+
+    // TODO: check lastLogTerm and lastLogIndex before granting vote
 
     println!("Vote granted");
     state.set_voted_for(Some(candidate_id.to_string()));
