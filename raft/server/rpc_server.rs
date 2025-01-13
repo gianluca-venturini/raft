@@ -123,7 +123,7 @@ fn maybe_append_entries(
     prev_log_term: u32,
     leader_commit: u32,
 ) -> (bool, u32) {
-    state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
+    state.last_heartbeat_timestamp_ms = get_current_time_ms();
     state.volatile.leader_id = Some(leader_id.to_string());
 
     if term < state.get_current_term() {

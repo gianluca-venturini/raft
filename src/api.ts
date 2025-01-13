@@ -99,7 +99,7 @@ export class RaftNode implements RaftClientApi {
 }
 
 export class RaftClient implements RaftClientApi {
-    private maxAttempts = 10;
+    private maxAttempts = 20;
 
     constructor(private nodes: { [nodeId: string]: RaftNode }) { }
 

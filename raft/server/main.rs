@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::{watch, RwLock as AsyncRwLock};
 use tokio::{signal, task};
-use update::maybe_send_update;
+use update::maybe_send_update_all;
 
 mod election;
 mod rpc_server;
@@ -14,16 +14,17 @@ mod update;
 mod util;
 mod web_server;
 
+/** Sleep time on the thread that runs elections and updates.
+ * Keep this value significantly lower than the other timeouts. */
+const SLEEP_MS: u64 = 5;
+
 /** Periodically transition the server role. */
 fn spawn_timer(state: Arc<AsyncRwLock<state::State>>) {
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(
-                election::ELECTION_TIMEOUT_MS / 10,
-            ))
-            .await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP_MS)).await;
             maybe_attempt_election(state.clone()).await;
-            maybe_send_update(state.clone()).await;
+            maybe_send_update_all(state.clone()).await;
         }
     });
 }

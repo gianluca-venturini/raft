@@ -16,7 +16,7 @@ pub mod raft {
 
 static RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::from_entropy()));
 
-pub const ELECTION_TIMEOUT_MS: u64 = 150;
+const ELECTION_TIMEOUT_MS: u64 = 300;
 
 pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
     {
@@ -25,15 +25,15 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
         if s.role != state::Role::Follower {
             return;
         }
-        let elapsed = get_current_time_ms() - s.last_received_heartbeat_timestamp_ms;
+        let elapsed = get_current_time_ms() - s.last_heartbeat_timestamp_ms;
         // Necessary to wait random time to decrease the probability multiple nodes starting an election at the same time
         let wait_time_jitter_ms = {
             let mut rng = RNG.lock().unwrap();
-            rng.gen_range(0..=150)
+            rng.gen_range(0..=ELECTION_TIMEOUT_MS)
         };
         println!(
             "Last heartbeat ms timestamp: {}",
-            s.last_received_heartbeat_timestamp_ms
+            s.last_heartbeat_timestamp_ms
         );
         println!("Elapsed ms since heartbeat: {}", elapsed);
         if elapsed < (ELECTION_TIMEOUT_MS + wait_time_jitter_ms).into() {

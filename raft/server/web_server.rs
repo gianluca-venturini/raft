@@ -5,8 +5,8 @@ use std::env;
 use std::sync::Arc;
 use tokio::sync::RwLock as AsyncRwLock;
 
-use crate::maybe_send_update;
 use crate::state;
+use crate::update::send_update_all;
 
 #[derive(Deserialize)]
 struct GetRequest {
@@ -68,7 +68,7 @@ async fn set_variable(
         s.append_log_entry(entry);
     }
 
-    maybe_send_update(state.get_ref().clone()).await;
+    send_update_all(state.get_ref().clone()).await;
     // TODO: do not return until the update has been sent to a majority of nodes and is committed
 
     println!("Variable set: {} = {}", body.key, body.value);

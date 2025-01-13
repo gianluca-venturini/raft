@@ -9,10 +9,27 @@ pub mod raft {
     tonic::include_proto!("raft");
 }
 
-pub async fn maybe_send_update(state: Arc<AsyncRwLock<state::State>>) {
+/** Time between hearbeats. Keep this one order of magnitude lower than ELECTION_TIMEOUT_MS.
+ * to ensure no election starts if the leader is alive. */
+const HEARTBEAT_TIMEOUT_MS: u128 = 15;
+
+pub async fn maybe_send_update_all(state: Arc<AsyncRwLock<state::State>>) {
     let s = state.read().await;
     if s.role != state::Role::Leader {
         return;
+    }
+    if s.last_heartbeat_timestamp_ms + HEARTBEAT_TIMEOUT_MS > crate::util::get_current_time_ms() {
+        // No need to send an update since we've sent one recently
+        return;
+    }
+    drop(s);
+    send_update_all(state).await;
+}
+
+pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>) {
+    let s = state.read().await;
+    if s.role != state::Role::Leader {
+        panic!("Programmer error: send_update_all called on a non-leader node");
     }
     let node_ids = s.node_ids.clone();
     let node_id = s.node_id.clone();
@@ -56,6 +73,10 @@ pub async fn maybe_send_update(state: Arc<AsyncRwLock<state::State>>) {
         // TODO: Handle the case in which not majority of nodes have accepted the update
         println!("Not enough nodes have accepted the update");
     }
+
+    let mut s = state.write().await;
+    // Mark the time the last heartbeat was sent
+    s.last_heartbeat_timestamp_ms = crate::util::get_current_time_ms();
 }
 
 fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {

@@ -76,9 +76,9 @@ pub struct State {
     // State about the current machine
     /** Role of the node */
     pub role: Role,
-    /** The last time that a heartbeat was received from a leader, in this machine local time.
-     * 0 if the current machine is the leader. */
-    pub last_received_heartbeat_timestamp_ms: u128,
+    /** For followers: the last time that a heartbeat was received from the leader in this machine local time.
+     * For leader: the last time that a heartbeat was sent to the followers in this machine local time. */
+    pub last_heartbeat_timestamp_ms: u128,
     /** Ids of the other nodes of the ring */
     pub node_ids: Vec<String>,
     /** Id of the current node */
@@ -235,7 +235,7 @@ pub fn init_state(num_nodes: u16, node_id: &str, storage_path: Option<String>) -
     for i in 0..num_nodes {
         state.node_ids.push(i.to_string());
     }
-    state.last_received_heartbeat_timestamp_ms = get_current_time_ms();
+    state.last_heartbeat_timestamp_ms = get_current_time_ms();
     state.node_id = node_id.to_string();
     state
 }
