@@ -75,9 +75,9 @@ impl Raft for MyRaft {
             println!("Vote not granted: candidate term is not up to date");
             reply.term = s.get_current_term();
             reply.vote_granted = false;
-        }
-        if s.get_voted_for().is_some()
+        } else if s.get_voted_for().is_some()
             && s.get_voted_for() != Some(request.get_ref().candidate_id.to_string())
+            && request.get_ref().term == s.get_current_term()
         {
             println!("Vote not granted: already voted for another candidate in this term");
             reply.vote_granted = false;
