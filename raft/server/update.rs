@@ -16,6 +16,7 @@ pub async fn maybe_send_update(state: Arc<AsyncRwLock<state::State>>) {
     }
     let node_ids = s.node_ids.clone();
     let node_id = s.node_id.clone();
+    drop(s);
 
     let futures = node_ids
         .iter()
@@ -37,6 +38,7 @@ pub async fn maybe_send_update(state: Arc<AsyncRwLock<state::State>>) {
         }
     }
 
+    let s = state.read().await;
     let majority = s.node_ids.len() / 2;
     if successful_responses > majority {
         println!("Majority of nodes have accepted the update");
