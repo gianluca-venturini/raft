@@ -11,7 +11,7 @@ pub mod raft {
 
 /** Time between hearbeats. Keep this one order of magnitude lower than ELECTION_TIMEOUT_MS.
  * to ensure no election starts if the leader is alive. */
-const HEARTBEAT_TIMEOUT_MS: u128 = 15;
+const HEARTBEAT_TIMEOUT_MS: u128 = 20;
 
 pub async fn maybe_send_update_all(state: Arc<AsyncRwLock<state::State>>) {
     let s = state.read().await;

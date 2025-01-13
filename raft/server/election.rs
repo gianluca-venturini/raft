@@ -16,7 +16,7 @@ pub mod raft {
 
 static RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::from_entropy()));
 
-const ELECTION_TIMEOUT_MS: u64 = 300;
+const ELECTION_TIMEOUT_MS: u64 = 200;
 
 pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
     {
