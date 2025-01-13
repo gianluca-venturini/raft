@@ -12,13 +12,13 @@ export interface RaftNodeProcesses {
 export function startRaftNode(index: number, numNodes: number): RaftNodeProcesses {
     const port = 8000 + index;
     const child = spawn('yarn', ['start-raft-server'], {
-        detached: true, // This creates a new process group
         env: {
             NUM_NODES: `${numNodes}`,
             ID: `${index}`,
             PORT: `${port}`,
             RPC_PORT: `${50000 + index}`,
-        }
+        },
+        shell: '/bin/bash',
     });
     child.stderr.on('data', (data) => {
         console.error(`stderr[${index}]: ${data}`);
@@ -51,8 +51,8 @@ export function startRaftNode(index: number, numNodes: number): RaftNodeProcesse
         }),
         leader: isLeaderPromise,
         exit: () => new Promise(resolve => {
-            console.log(`exiting server ${index}...`);
-            process.kill(-child.pid!, 'SIGTERM'); // Negative PID sends signal to the entire process group
+            console.log(`exiting server ${index} [pid=${child.pid}]...`);
+            child.kill('SIGTERM');
             child.on('close', (code) => {
                 console.log(`exit[${index}]: ${code}`);
                 resolve();
