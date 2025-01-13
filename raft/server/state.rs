@@ -252,7 +252,7 @@ pub fn init_leader_state(state: &mut State) {
         state.node_ids.iter().map(|id| (id.clone(), 0)).collect();
 }
 
-mod tests {
+mod test_init_state {
     use super::*;
 
     #[test]

@@ -169,11 +169,12 @@ fn calculate_vote(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod test_maybe_append_entries {
+    use super::maybe_append_entries;
+    use crate::{rpc_server::raft, state};
 
     #[test]
-    fn test_maybe_append_entries_success_on_empty() {
+    fn success_on_empty() {
         let mut state = state::State::default();
 
         let entries = vec![raft::LogEntry {
@@ -190,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_success_on_entry_same_term() {
+    fn success_on_entry_same_term() {
         let mut state = state::State::default();
         state.append_log_entry(state::LogEntry {
             term: 1,
@@ -230,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_success_on_entry_different_term() {
+    fn success_on_entry_different_term() {
         let mut state = state::State::default();
         state.append_log_entry(state::LogEntry {
             term: 1,
@@ -273,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_success_commit() {
+    fn success_commit() {
         let mut state = state::State::default();
         state.append_log_entry(state::LogEntry {
             term: 1,
@@ -283,16 +284,10 @@ mod tests {
             },
         });
 
-        // No new entry is been appended
         let entries = vec![];
-
         assert_eq!(state.volatile.commit_index, 0);
 
-        let (success, term) = maybe_append_entries(
-            &mut state, 1, "0", &entries, 1, 1,
-            // The entry already in the log is now committed
-            1,
-        );
+        let (success, term) = maybe_append_entries(&mut state, 1, "0", &entries, 1, 1, 1);
 
         assert!(success);
         assert_eq!(term, 1);
@@ -300,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_success_append_commit() {
+    fn success_append_commit() {
         let mut state = state::State::default();
         state.append_log_entry(state::LogEntry {
             term: 1,
@@ -320,12 +315,7 @@ mod tests {
 
         assert_eq!(state.volatile.commit_index, 0);
 
-        let (success, term) = maybe_append_entries(
-            &mut state, 3, "0", &entries, 1, 1,
-            // The entry that is being appended is alrady committed
-            // e.g. the majority of the other followers already successfully appended it
-            2,
-        );
+        let (success, term) = maybe_append_entries(&mut state, 3, "0", &entries, 1, 1, 2);
 
         assert!(success);
         assert_eq!(term, 3);
@@ -333,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_failure_empty() {
+    fn failure_empty() {
         let mut state = state::State::default();
 
         let entries = vec![raft::LogEntry {
@@ -346,7 +336,6 @@ mod tests {
 
         let (success, term) = maybe_append_entries(&mut state, 3, "0", &entries, 1, 1, 0);
 
-        // Should not succeed because the log doesn't contain the prev_log_index
         assert!(!success);
         assert_eq!(term, 0);
         assert_eq!(state.get_log().len(), 0);
@@ -354,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_failure_prev_index_not_in_log() {
+    fn failure_prev_index_not_in_log() {
         let mut state = state::State::default();
         state.set_current_term(1);
         state.append_log_entry(state::LogEntry {
@@ -375,7 +364,6 @@ mod tests {
 
         let (success, term) = maybe_append_entries(&mut state, 3, "0", &entries, 2, 1, 0);
 
-        // Should not succeed because the log doesn't contain the prev_log_index
         assert!(!success);
         assert_eq!(term, 1);
         assert_eq!(state.get_log().len(), 1);
@@ -383,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_failure_prev_term_different() {
+    fn failure_prev_term_different() {
         let mut state = state::State::default();
         state.set_current_term(1);
         state.append_log_entry(state::LogEntry {
@@ -404,7 +392,6 @@ mod tests {
 
         let (success, term) = maybe_append_entries(&mut state, 3, "0", &entries, 1, 2, 0);
 
-        // Should not succeed because the log contains the log index, but the term is different
         assert!(!success);
         assert_eq!(term, 1);
         assert_eq!(state.get_log().len(), 1);
@@ -412,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_append_entries_failure_old_term() {
+    fn failure_old_term() {
         let mut state = state::State::default();
         state.set_current_term(3);
 
@@ -426,18 +413,20 @@ mod tests {
 
         let (success, term) = maybe_append_entries(&mut state, 1, "0", &entries, 0, 0, 0);
 
-        // Should not succeed because the leader log is older than the follower
         assert!(!success);
-        // Should send the updated term in order to inform the leader it should be deposed
-        // and not update its term
         assert_eq!(term, 3);
-        // Entries are not appended
         assert_eq!(state.get_log().len(), 0);
         assert_eq!(state.volatile.commit_index, 0);
     }
+}
+
+#[cfg(test)]
+mod test_calculate_vote {
+    use super::calculate_vote;
+    use crate::state;
 
     #[test]
-    fn test_calculate_vote_grant_first_vote() {
+    fn first_vote() {
         let mut state = state::State::default();
         state.set_current_term(0);
 
@@ -450,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_vote_deny_old_term() {
+    fn deny_old_term() {
         let mut state = state::State::default();
         state.set_current_term(2);
 
@@ -463,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_vote_deny_already_voted() {
+    fn deny_already_voted() {
         let mut state = state::State::default();
         state.set_current_term(1);
         state.set_voted_for(Some("candidate1".to_string()));
@@ -477,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_vote_grant_same_candidate() {
+    fn grant_same_candidate() {
         let mut state = state::State::default();
         state.set_current_term(1);
         state.set_voted_for(Some("candidate1".to_string()));
@@ -491,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_vote_grant_new_term() {
+    fn grant_new_term() {
         let mut state = state::State::default();
         state.set_current_term(1);
         state.set_voted_for(Some("candidate1".to_string()));

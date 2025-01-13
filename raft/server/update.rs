@@ -176,13 +176,13 @@ pub async fn update_leader_state(
 }
 
 #[cfg(test)]
-mod tests {
+mod test_update_leader_state {
     use state::init_leader_state;
 
     use super::*;
 
     #[tokio::test]
-    async fn test_update_leader_state_deposed() {
+    async fn deposed() {
         let mut state = state::init_state(3, "0", None);
         init_leader_state(&mut state);
         state.role = state::Role::Leader;
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_leader_state_success() {
+    async fn success() {
         let mut state = state::init_state(3, "0", None);
         init_leader_state(&mut state);
         state.role = state::Role::Leader;
