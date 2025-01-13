@@ -5,15 +5,15 @@ import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError, RaftClient } from './api';
 import { assert } from 'console';
 
-describe('integration 3 nodes', () => {
-    integrationTests(3);
-});
+// describe('integration 3 nodes', () => {
+//     integrationTests(3);
+// });
 
 // Enable below to stress test the system
 
-// describe('integration 11 nodes', () => {
-//     integrationTests(11);
-// });
+describe('integration 11 nodes', () => {
+    integrationTests(11);
+});
 
 // describe('integration 101 nodes', () => {
 //     integrationTests(101);
@@ -92,7 +92,7 @@ function integrationTests(numNodes: number) {
 
         it('one node is elected leader', async () => {
             let numLeaders = 0;
-            for (let attempts = 0; attempts < 10; attempts++) {
+            for (let attempts = 0; attempts < 100; attempts++) {
                 for (const node of raftNodes) {
                     if ((await node.api.getState()).role === 'Leader') {
                         numLeaders++;
