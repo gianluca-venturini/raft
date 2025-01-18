@@ -7,9 +7,11 @@ export interface RaftNodeProcesses {
     leader: Promise<void>,
     exit: () => Promise<void>,
     api: RaftNode,
+    storagePath: string,
 }
 
-export function startRaftNode(index: number, numNodes: number, noElection: boolean = false): RaftNodeProcesses {
+export function startRaftNode(execId: string, index: number, numNodes: number, noElection: boolean = false): RaftNodeProcesses {
+    const storagePath = `/tmp/node-${execId}-${index}`;
     const port = 8000 + index;
     const child = spawn('yarn', ['start-raft-server'], {
         env: {
@@ -17,6 +19,7 @@ export function startRaftNode(index: number, numNodes: number, noElection: boole
             ID: `${index}`,
             PORT: `${port}`,
             RPC_PORT: `${50000 + index}`,
+            STORAGE_PATH: storagePath,
             NO_ELECTION: noElection ? 'true' : undefined,
         },
         shell: '/bin/bash',
@@ -60,5 +63,6 @@ export function startRaftNode(index: number, numNodes: number, noElection: boole
             });
         }),
         api: new RaftNode('localhost', port, `${index}`),
+        storagePath,
     };
 }

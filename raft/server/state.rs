@@ -13,7 +13,6 @@ const VOTED_FOR_FILE: &str = "voted_for.bin";
 const LOG_FILE: &str = "log.bin";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
 pub enum Command {
     WriteVar { name: String, value: i32 },
     DeleteVar { name: String },
@@ -195,6 +194,7 @@ impl State {
                 let mut arr = [0u8; 4];
                 arr.copy_from_slice(&bytes);
                 self.persisted.current_term = u32::from_le_bytes(arr);
+                println!("Loaded current_term: {}", self.persisted.current_term);
             }
         }
 
@@ -202,13 +202,23 @@ impl State {
         if let Ok(bytes) = self.read_from_file(VOTED_FOR_FILE) {
             if !bytes.is_empty() {
                 self.persisted.voted_for = Some(String::from_utf8_lossy(&bytes).to_string());
+                println!(
+                    "Loaded voted_for: {}",
+                    self.persisted.voted_for.as_ref().unwrap()
+                );
             }
         }
 
         // Load log
         if let Ok(bytes) = self.read_from_file(LOG_FILE) {
-            if let Ok(log) = bincode::deserialize(&bytes) {
-                self.persisted.log = log;
+            match bincode::deserialize(&bytes) {
+                Ok(log) => {
+                    self.persisted.log = log;
+                    println!("Loaded log: {:?}", self.persisted.log);
+                }
+                Err(e) => {
+                    eprintln!("Failed to deserialize log file: {}", e);
+                }
             }
         }
 
@@ -222,6 +232,7 @@ pub fn init_state(num_nodes: u16, node_id: &str, storage_path: Option<String>) -
 
     // Create storage directory if needed
     if let Some(path) = &state.storage_path {
+        println!("Initializing storage directory: {:?}", path);
         if let Err(e) = fs::create_dir_all(path) {
             eprintln!("Failed to create storage directory: {}", e);
         }

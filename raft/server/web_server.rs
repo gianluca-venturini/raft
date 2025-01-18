@@ -82,9 +82,37 @@ async fn set_variable(
  */
 async fn get_state(state: web::Data<Arc<AsyncRwLock<state::State>>>) -> HttpResponse {
     let s = state.read().await;
+
+    // Convert log entries to the expected format
+    let formatted_log = s
+        .get_log()
+        .iter()
+        .map(|entry| {
+            let command = match &entry.command {
+                state::Command::WriteVar { name, value } => json!({
+                    "type": "WriteVar",
+                    "name": name,
+                    "value": value
+                }),
+                state::Command::DeleteVar { name } => json!({
+                    "type": "DeleteVar",
+                    "name": name
+                }),
+                state::Command::Noop => json!({
+                    "type": "Noop"
+                }),
+            };
+
+            json!({
+                "term": entry.term,
+                "command": command
+            })
+        })
+        .collect::<Vec<_>>();
+
     let response = json!({
         "role": s.role,
-        "log": s.get_log(),
+        "log": formatted_log,
     });
     HttpResponse::Ok().json(response)
 }

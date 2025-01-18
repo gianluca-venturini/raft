@@ -1,5 +1,6 @@
 
 import { fromPairs, times } from 'lodash';
+import { v4 as uuidv4 } from 'uuid';
 
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError, RaftClient } from './api';
@@ -22,9 +23,11 @@ describe('integration 11 nodes', () => {
 describe('integration single node', () => {
     let raftNode: RaftNodeProcesses;
     let raftClient: RaftClient;
+    let execId: string;
 
     beforeEach(async () => {
-        raftNode = startRaftNode(0, 1);
+        execId = uuidv4();
+        raftNode = startRaftNode(execId, 0, 1);
         raftClient = new RaftClient({ '0': raftNode.api });
         // Wait until it's started
         await raftNode.started;
@@ -48,25 +51,42 @@ describe('integration single node', () => {
         expect(await raftClient.getVar('foo')).toBe(42);
     });
 
-    xit('persists the log on disk', async () => {
+    it('persists the log on disk', async () => {
         await raftClient.setVar('foo', 42);
         await raftNode.exit();
-        raftNode = startRaftNode(0, 1);
+        // Use the same execId to ensure the node is restarted with the same storage path
+        raftNode = startRaftNode(execId, 0, 1);
         await raftNode.started;
         // Need to wait for the node to become leader to ensure
         // the log is applied
         await getLeaderNode([raftNode]);
-        expect(await raftClient.getVar('foo')).toBe(42);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const value = await doWithRetry(async () => {
+            // We may need to retry few times because the node is still starting up
+            // and may not have committed the persisted log entry yet
+            try {
+                return await raftClient.getVar('foo')
+            } catch (error) {
+                if (error instanceof NotFoundError) {
+                    // retry
+                    throw new RetryError();
+                }
+            }
+        });
+        expect(value).toBe(42);
     });
 });
 
 describe('integration initial state', () => {
     let raftNodes: RaftNodeProcesses[];
     let raftClient: RaftClient;
+    let execId: string;
 
     beforeEach(async () => {
         const numNodes = 11;
-        raftNodes = times(numNodes).map(index => startRaftNode(index, numNodes, true));
+        execId = uuidv4();
+        raftNodes = times(numNodes).map(index => startRaftNode(execId, index, numNodes, true));
         raftClient = new RaftClient(fromPairs(raftNodes.map((node, index) => [`${index}`, node.api])));
         // Wait until all servers are started
         await Promise.all(raftNodes.map(server => server.started));
@@ -89,9 +109,11 @@ describe('integration initial state', () => {
 function integrationTests(numNodes: number) {
     let raftNodes: RaftNodeProcesses[];
     let raftClient: RaftClient;
+    let execId: string;
 
     beforeEach(async () => {
-        raftNodes = times(numNodes).map(index => startRaftNode(index, numNodes));
+        execId = uuidv4();
+        raftNodes = times(numNodes).map(index => startRaftNode(execId, index, numNodes));
         raftClient = new RaftClient(fromPairs(raftNodes.map((node, index) => [`${index}`, node.api])));
         // Wait until all servers are started
         await Promise.all(raftNodes.map(server => server.started));
@@ -142,7 +164,7 @@ function integrationTests(numNodes: number) {
             if (leaderNode) {
                 await leaderNode.exit();
                 // Restart the node that we just terminated
-                const newNode = startRaftNode(leaderNode.id, numNodes);
+                const newNode = startRaftNode(execId, leaderNode.id, numNodes);
                 // Replace the leader with the new node
                 raftNodes[leaderNode.id] = newNode;
             } else (
