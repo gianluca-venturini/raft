@@ -3,6 +3,7 @@ FROM debian:bookworm-slim
 
 # Install required dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
     curl \
     ca-certificates \
     build-essential \
