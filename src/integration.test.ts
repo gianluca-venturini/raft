@@ -60,6 +60,32 @@ describe('integration single node', () => {
     });
 });
 
+describe('integration initial state', () => {
+    let raftNodes: RaftNodeProcesses[];
+    let raftClient: RaftClient;
+
+    beforeEach(async () => {
+        const numNodes = 11;
+        raftNodes = times(numNodes).map(index => startRaftNode(index, numNodes, true));
+        raftClient = new RaftClient(fromPairs(raftNodes.map((node, index) => [`${index}`, node.api])));
+        // Wait until all servers are started
+        await Promise.all(raftNodes.map(server => server.started));
+    });
+
+    afterEach(async () => {
+        await Promise.all(raftNodes.map(server => server.exit()));
+    });
+
+    it('all nodes are followers at the beginning', async () => {
+        for (const node of raftNodes) {
+            console.log('testing node');
+            const state = await node.api.getState();
+            console.log('state', state);
+            expect(state.role).toBe('Follower');
+        }
+    });
+});
+
 function integrationTests(numNodes: number) {
     let raftNodes: RaftNodeProcesses[];
     let raftClient: RaftClient;
@@ -81,15 +107,6 @@ function integrationTests(numNodes: number) {
     });
 
     describe('leader election', () => {
-        it('all nodes are followers at the beginning', async () => {
-            for (const node of raftNodes) {
-                console.log('testing node');
-                const state = await node.api.getState();
-                console.log('state', state);
-                expect(state.role).toBe('Follower');
-            }
-        });
-
         it('one node is elected leader', async () => {
             let numLeaders = 0;
             for (let attempts = 0; attempts < 100; attempts++) {

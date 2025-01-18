@@ -9,7 +9,7 @@ export interface RaftNodeProcesses {
     api: RaftNode,
 }
 
-export function startRaftNode(index: number, numNodes: number): RaftNodeProcesses {
+export function startRaftNode(index: number, numNodes: number, noElection: boolean = false): RaftNodeProcesses {
     const port = 8000 + index;
     const child = spawn('yarn', ['start-raft-server'], {
         env: {
@@ -17,6 +17,7 @@ export function startRaftNode(index: number, numNodes: number): RaftNodeProcesse
             ID: `${index}`,
             PORT: `${port}`,
             RPC_PORT: `${50000 + index}`,
+            NO_ELECTION: noElection ? 'true' : undefined,
         },
         shell: '/bin/bash',
     });

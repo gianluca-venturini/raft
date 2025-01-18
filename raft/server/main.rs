@@ -19,11 +19,13 @@ mod web_server;
 const SLEEP_MS: u64 = 5;
 
 /** Periodically transition the server role. */
-fn spawn_timer(state: Arc<AsyncRwLock<state::State>>) {
+fn spawn_timer(state: Arc<AsyncRwLock<state::State>>, no_election: bool) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP_MS)).await;
-            maybe_attempt_election(state.clone()).await;
+            if !no_election {
+                maybe_attempt_election(state.clone()).await;
+            }
             maybe_send_update_all(state.clone()).await;
         }
     });
@@ -43,13 +45,14 @@ async fn main() {
     ).parse()
     .expect("NUM_NODES must be an integer");
     let storage_path = env::var_os("STORAGE_PATH").map(|p| p.into_string().unwrap());
+    let no_election = env::var("NO_ELECTION").is_ok();
     let state = Arc::new(AsyncRwLock::new(state::init_state(
         num_nodes,
         &id,
         storage_path,
     )));
 
-    spawn_timer(state.clone());
+    spawn_timer(state.clone(), no_election);
 
     let (shutdown_tx, shutdown_rx) = watch::channel(());
 
