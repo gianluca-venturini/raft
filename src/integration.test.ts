@@ -177,6 +177,16 @@ function integrationTests(numNodes: number) {
                 }
             });
         }, 30_000);
+
+        it('write and read variable with one node failure', async () => {
+            // Kill a node, maybe the leader
+            // the expectation is that everything should still work
+            // with a single node failure
+            raftNodes.shift()?.exit();
+            await raftClient.setVar('foo', 42);
+            expect(await raftClient.getVar('foo')).toBe(42);
+        });
+
     });
 
     describe('log replication', () => {

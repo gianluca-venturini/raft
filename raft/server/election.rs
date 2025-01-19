@@ -8,6 +8,7 @@ use std::cmp::max;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock as AsyncRwLock;
 
+use crate::update::{send_update_all, WaitFor};
 use crate::{rpc_util::calculate_rpc_server_dst, state, util::get_current_time_ms};
 
 pub mod raft {
@@ -69,17 +70,17 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
             tokio::spawn(async move {
                 let result = request_vote(&id, current_term, &candidate_id).await;
                 if let Err(e) = result {
-                    println!("Error: {}", e);
+                    println!("Error requesting vote from node {}: {}", id, e);
                     // Not a big deal, will attempt to be elected from majority of nodes
                 } else if let Ok((vote_granted, term)) = result {
                     if vote_granted {
-                        println!("Received vote");
+                        println!("Received vote from node {}", id);
                         let mut votes = votes.lock().unwrap();
                         *votes += 1;
                     } else {
                         let mut max_term = max_term.lock().unwrap();
                         *max_term = max(*max_term, term);
-                        println!("Rejected vote");
+                        println!("Rejected vote from node {}", id);
                     }
                 };
             })
@@ -91,7 +92,8 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
 
     {
         let mut s = state.write().await;
-        if *votes.lock().unwrap() > s.node_ids.len() / 2 {
+        let majority = (s.node_ids.len() as f32 / 2.0).ceil() as u32;
+        if *votes.lock().unwrap() >= majority {
             println!("Elected leader with majority votes");
             s.role = state::Role::Leader;
             let current_term = s.get_current_term();
@@ -101,27 +103,20 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
                 term: current_term,
                 command: state::Command::Noop,
             });
-            let node_ids = s.node_ids.clone();
-            let node_id = s.node_id.clone();
             drop(s);
 
-            let threads = node_ids
-                .iter()
-                // do not connect to self
-                .filter(|id| **id != node_id)
-                .map(|id| {
-                    let id = id.to_string();
-                    let state = Arc::clone(&state);
-                    println!("Sending update to all nodes to enstablish leadership");
-                    tokio::spawn(async move {
-                        // Send updates to all nodes to inform them of the new leader
-                        let _ = send_update_node(&id, state).await;
-                    })
-                });
+            println!("Sending update to all nodes to enstablish leadership");
+            // Retry few times to maximize the chance to reach majority of nodes
+            let successful_responses = send_update_all(state.clone(), WaitFor::Retries(3)).await;
 
-            for thread in threads {
-                thread.await.unwrap();
+            if successful_responses < majority {
+                println!("Failed to update the majority of nodes");
+                println!("Reverting to follower");
+                let mut s = state.write().await;
+                s.role = state::Role::Follower;
+                return;
             }
+
             println!("Update sent to all nodes");
         } else {
             println!("Election lost");

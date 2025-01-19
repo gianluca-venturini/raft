@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock as AsyncRwLock;
 
 use crate::state;
-use crate::update::send_update_all;
+use crate::update::{send_update_all, WaitFor};
 
 #[derive(Deserialize)]
 struct GetRequest {
@@ -68,8 +68,8 @@ async fn set_variable(
         s.append_log_entry(entry);
     }
 
-    send_update_all(state.get_ref().clone()).await;
-    // TODO: do not return until the update has been sent to a majority of nodes and is committed
+    // If the majority is not reached, wait forever
+    send_update_all(state.get_ref().clone(), WaitFor::Majority).await;
 
     println!("Variable set: {} = {}", body.key, body.value);
     let mut response: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();

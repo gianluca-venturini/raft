@@ -13,6 +13,12 @@ pub mod raft {
  * to ensure no election starts if the leader is alive. */
 const HEARTBEAT_TIMEOUT_MS: u128 = 20;
 
+#[derive(Clone)]
+pub enum WaitFor {
+    Majority,
+    Retries(u32),
+}
+
 pub async fn maybe_send_update_all(state: Arc<AsyncRwLock<state::State>>) {
     let s = state.read().await;
     if s.role != state::Role::Leader {
@@ -23,17 +29,21 @@ pub async fn maybe_send_update_all(state: Arc<AsyncRwLock<state::State>>) {
         return;
     }
     drop(s);
-    send_update_all(state).await;
+    // Retry once per node, in case of failure we will retry soon-ish
+    send_update_all(state, WaitFor::Retries(1)).await;
 }
 
-pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>) {
-    let s = state.read().await;
+pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>, wait_for: WaitFor) -> u32 {
+    let s: tokio::sync::RwLockReadGuard<'_, state::State> = state.read().await;
     if s.role != state::Role::Leader {
         panic!("Programmer error: send_update_all called on a non-leader node");
     }
     let node_ids = s.node_ids.clone();
     let node_id = s.node_id.clone();
+    let majority = (s.node_ids.len() as f32 / 2.0).ceil() as u32;
     drop(s);
+
+    let node_updates_successfully = Arc::new(tokio::sync::Mutex::new(1u32)); // Count self as successful
 
     let futures = node_ids
         .iter()
@@ -42,26 +52,60 @@ pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>) {
         .map(|id| {
             let id = id.to_string();
             let state = Arc::clone(&state);
-            tokio::spawn(async move { send_update_node(&id, state).await })
+            let wait_for = wait_for.clone();
+            let node_updates_successfully = Arc::clone(&node_updates_successfully);
+            tokio::spawn(async move {
+                let mut attempt = 0;
+                loop {
+                    match send_update_node(&id, state.clone()).await {
+                        Ok(result) => {
+                            let mut count = node_updates_successfully.lock().await;
+                            *count += 1;
+                            println!("{} nodes have accepted the update", count);
+                            return Ok::<bool, ()>(result);
+                        }
+                        Err(e) => {
+                            println!("Error sending update to node {}: {}", id, e);
+                            attempt += 1;
+                            match wait_for {
+                                WaitFor::Majority => {
+                                    let current_updates = *node_updates_successfully.lock().await;
+                                    if current_updates >= majority {
+                                        // It's ok to bail out early if we've reached majority with other nodes
+                                        return Ok(false);
+                                    }
+                                    // sleep for a bit before retrying
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(100))
+                                        .await;
+                                    continue;
+                                }
+                                WaitFor::Retries(n) => {
+                                    if attempt >= n {
+                                        return Ok(false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            })
         })
         .collect::<Vec<_>>();
 
-    let mut successful_responses = 1; // Count self as successful
+    // Wait for all the futures to complete
     for future in futures {
-        if let Ok(Ok(success)) = future.await {
-            if success {
-                successful_responses += 1;
-            }
-        }
+        let _ = future.await.unwrap();
     }
 
+    let successful_responses = *node_updates_successfully.lock().await;
+
     let s = state.read().await;
-    let majority = s.node_ids.len() / 2;
-    if successful_responses > majority {
+    if successful_responses >= majority {
         println!("Majority of nodes have accepted the update");
         // Index of the entry that the leader believe is the latest
         // and the majority of followers agree
         let new_commit_index = s.get_log().len() as u32;
+        println!("Updating commit index to {}", new_commit_index);
         drop(s);
 
         {
@@ -70,13 +114,15 @@ pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>) {
             s.apply_committed();
         }
     } else {
-        // TODO: Handle the case in which not majority of nodes have accepted the update
-        println!("Not enough nodes have accepted the update");
+        // It's fine to bail out if WaitFor::Retries, we will retry forever soon-ish
+        // for trying to reach failed nodes
+        println!("Less than majority of nodes have accepted the update");
     }
 
     let mut s = state.write().await;
     // Mark the time the last heartbeat was sent
     s.last_heartbeat_timestamp_ms = crate::util::get_current_time_ms();
+    return successful_responses;
 }
 
 fn convert_log_entry(entry: &state::LogEntry) -> raft::LogEntry {
