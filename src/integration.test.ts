@@ -4,21 +4,14 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError, RaftClient } from './api';
-import { assert } from 'console';
 
 describe('integration 3 nodes', () => {
     integrationTests(3);
 });
 
-// Enable below to stress test the system
-
 describe('integration 11 nodes', () => {
     integrationTests(11);
 });
-
-// describe('integration 101 nodes', () => {
-//     integrationTests(101);
-// });
 
 describe('integration single node', () => {
     let raftNode: RaftNodeProcesses;
@@ -78,7 +71,7 @@ describe('integration single node', () => {
     });
 });
 
-describe('integration initial state', () => {
+describe('initial state', () => {
     let raftNodes: RaftNodeProcesses[];
     let raftClient: RaftClient;
     let execId: string;
@@ -86,6 +79,7 @@ describe('integration initial state', () => {
     beforeEach(async () => {
         const numNodes = 11;
         execId = uuidv4();
+        // Don't execute election so we can observe the initial state
         raftNodes = times(numNodes).map(index => startRaftNode(execId, index, numNodes, true));
         raftClient = new RaftClient(fromPairs(raftNodes.map((node, index) => [`${index}`, node.api])));
         // Wait until all servers are started
