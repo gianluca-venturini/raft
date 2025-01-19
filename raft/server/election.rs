@@ -1,4 +1,3 @@
-use super::update::send_update_node;
 use once_cell::sync::Lazy;
 use raft::raft_client::RaftClient;
 use raft::RequestVoteRequest;
