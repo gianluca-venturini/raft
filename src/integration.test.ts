@@ -178,7 +178,7 @@ function integrationTests(numNodes: number) {
             });
         }, 30_000);
 
-        fit('write and read variable with N/2 - 1 node failure', async () => {
+        it('write and read variable with N/2 - 1 node failure', async () => {
             // Kill just one less than majority nodes, maybe the leader
             // the expectation is that everything should still work
             for (let i = 0; i < numNodes / 2 - 1; i++) {
