@@ -34,7 +34,7 @@
     "start-raft-server": "exec ./raft/target/debug/raft_server",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write",
     "test-raft": "cd raft/server && cargo test",
-    "test-integration": "jest",
+    "test-integration": "jest --runInBand",
     "test-github-ci": "act -j test",
     "clean": "rm -rf node_modules && rm -rf dist && rm -rf raft/client/pkg && rm -rf raft/target && rm -rf raft/pkg"
   },

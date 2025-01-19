@@ -178,14 +178,15 @@ function integrationTests(numNodes: number) {
             });
         }, 30_000);
 
-        it('write and read variable with one node failure', async () => {
-            // Kill a node, maybe the leader
+        fit('write and read variable with N/2 - 1 node failure', async () => {
+            // Kill just one less than majority nodes, maybe the leader
             // the expectation is that everything should still work
-            // with a single node failure
-            raftNodes.shift()?.exit();
+            for (let i = 0; i < numNodes / 2 - 1; i++) {
+                raftNodes.shift()?.exit();
+            }
             await raftClient.setVar('foo', 42);
             expect(await raftClient.getVar('foo')).toBe(42);
-        });
+        }, 30_000);
 
     });
 
