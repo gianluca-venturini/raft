@@ -182,7 +182,7 @@ function integrationTests(numNodes: number) {
             // Kill just one less than majority nodes, maybe the leader
             // the expectation is that everything should still work
             for (let i = 0; i < numNodes / 2 - 1; i++) {
-                raftNodes.shift()?.exit();
+                await raftNodes.shift()?.exit();
             }
             await raftClient.setVar('foo', 42);
             expect(await raftClient.getVar('foo')).toBe(42);

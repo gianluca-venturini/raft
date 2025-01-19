@@ -11,5 +11,6 @@ export default tseslint.config({
   ],
   rules: {
     'eqeqeq': ['error', 'always'],
+    '@typescript-eslint/no-floating-promises': 'error',
   },
 });
