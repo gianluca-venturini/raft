@@ -34,7 +34,8 @@ yarn test-integration
 - [ ] The setVar call should succeed when some (not majority) of followers are down
 - [ ] Send partial entry updates rather than all entries every time
 - [x] Depose leader when AppendEntries returns a higer term
-- [ ] Clean up the persisted state after every integration test
+- [ ] Clean up the persisted state on disk after every integration test
+- [ ] Every client operation should have a unique ID and be idempotent, so it can be retried if it fails
 
 # Learnings
 - Raft protocol implementation
