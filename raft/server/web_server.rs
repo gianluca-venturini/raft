@@ -134,8 +134,11 @@ pub async fn start_web_server(
 
     println!("Web server started");
 
-    let send_future = async move { server.await };
-    send_future.await?;
-
-    Ok(())
+    match server.await {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            eprintln!("Web server error: {}", e);
+            Err(e.into())
+        }
+    }
 }

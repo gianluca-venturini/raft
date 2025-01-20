@@ -73,11 +73,17 @@ async fn main() {
             println!("Received SIGTERM, sending shutdown signal...");
             let _ = shutdown_tx.send(());
         }
-        _ = rpc_server => {
-            println!("RPC server terminated");
+        result = rpc_server => {
+            match result {
+                Ok(server_result) => println!("RPC server thread terminated with result: {:?}", server_result),
+                Err(e) => println!("RPC server thread terminated with error: {:?}", e),
+            }
         }
-        _ = web_server => {
-            println!("Web server terminated");
+        result = web_server => {
+            match result {
+                Ok(server_result) => println!("Web server thread terminated with result: {:?}", server_result),
+                Err(e) => println!("Web server thread terminated with error: {:?}", e),
+            }
         }
     }
 }

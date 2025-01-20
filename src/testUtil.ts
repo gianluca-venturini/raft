@@ -32,11 +32,19 @@ export function startRaftNode(execId: string, index: number, numNodes: number, n
         isLeaderResolve = resolve;
     });
 
+    const exitPromise = new Promise<void>(resolve => {
+        child.on('close', (code) => {
+            console.log(`exit[${index}]: ${code}`);
+            resolve();
+        });
+    });
+
     return {
         id: index,
         started: new Promise<void>(resolve => {
             let webServerStarted = false;
             let rpcServerStarted = false;
+            let considerStarted = false;
             child.stdout.on('data', (data) => {
                 console.log(`stdout[${index}]: ${data}`);
                 if (data.toString().includes('Web server started')) {
@@ -48,20 +56,18 @@ export function startRaftNode(execId: string, index: number, numNodes: number, n
                 if (data.toString().includes('Elected leader with majority votes')) {
                     isLeaderResolve();
                 }
-                if (webServerStarted && rpcServerStarted) {
+                if (webServerStarted && rpcServerStarted && !considerStarted) {
+                    console.log(`server started ${index}`);
                     resolve();
                 }
             });
         }),
         leader: isLeaderPromise,
-        exit: () => new Promise(resolve => {
+        exit: () => {
             console.log(`exiting server ${index} [pid=${child.pid}]...`);
             child.kill('SIGTERM');
-            child.on('close', (code) => {
-                console.log(`exit[${index}]: ${code}`);
-                resolve();
-            });
-        }),
+            return exitPromise;
+        },
         api: new RaftNode('localhost', port, `${index}`),
         storagePath,
     };

@@ -34,9 +34,9 @@
     "start-raft-server": "exec ./raft/target/debug/raft_server",
     "prettier-format": "prettier --config .prettierrc 'src/**/*.ts' --write",
     "test-raft": "cd raft/server && cargo test",
-    "test-integration": "jest",
-    "test-integration-10": "for i in $(seq 1 10); do jest || { echo \"Test failed on iteration $i. Exiting loop.\"; break; }; done",
-    "test-integration-100": "for i in $(seq 1 100); do jest || { echo \"Test failed on iteration $i. Exiting loop.\"; break; }; done",
+    "test-integration": "jest --runInBand",
+    "test-integration-10": "for i in $(seq 1 10); do clean; yarn test-integration || { echo \"Test failed on iteration $i. Exiting loop.\"; break; }; done",
+    "test-integration-100": "for i in $(seq 1 100); do clean; yarn test-integration || { echo \"Test failed on iteration $i. Exiting loop.\"; break; }; done",
     "test-github-ci": "act -j test",
     "clean": "rm -rf node_modules && rm -rf dist && rm -rf raft/client/pkg && rm -rf raft/target && rm -rf raft/pkg"
   },

@@ -1,8 +1,10 @@
 use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
 use std::env;
+use std::error::Error as StdError;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock as AsyncRwLock};
+use tonic::transport::Error as TransportError;
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::state;
@@ -30,7 +32,7 @@ fn convert_proto_entry(entry: &raft::LogEntry) -> state::LogEntry {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct MyRaft {
     state: Arc<AsyncRwLock<state::State>>,
 }
@@ -98,18 +100,33 @@ pub async fn start_rpc_server(
     let addr = format!("[::1]:{}", port).parse().unwrap();
     let raft = MyRaft { state: state };
 
-    let server = Server::builder()
-        .add_service(RaftServer::new(raft))
-        .serve_with_shutdown(addr, async {
-            shutdown_rx.changed().await.ok();
-        });
+    loop {
+        let server = Server::builder()
+            .add_service(RaftServer::new(raft.clone()))
+            .serve_with_shutdown(addr, async {
+                shutdown_rx.changed().await.ok();
+            });
 
-    println!("RPC server started");
+        println!("RPC server started");
 
-    let send_future = async move { server.await };
-    send_future.await?;
-
-    Ok(())
+        match server.await {
+            Ok(_) => {
+                println!("RPC server terminated");
+                return Ok(());
+            }
+            Err(e) => {
+                if e.to_string().contains("transport error") {
+                    // This usually happens when the port is already in use
+                    // waiting on the port to be released by the OS
+                    eprintln!("Transport error on port {}, retrying: {}", port, e);
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    continue;
+                }
+                eprintln!("Failed to start RPC server on port {}: {}", port, e);
+                return Err(e.into());
+            }
+        }
+    }
 }
 
 fn maybe_append_entries(

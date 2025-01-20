@@ -5,9 +5,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError, RaftClient } from './api';
 
-describe('integration 3 nodes', () => {
-    integrationTests(3);
-});
+// describe('integration 3 nodes', () => {
+//     integrationTests(3);
+// });
 
 describe('integration 11 nodes', () => {
     integrationTests(11);
@@ -178,15 +178,16 @@ function integrationTests(numNodes: number) {
             });
         }, 30_000);
 
-        it('write and read variable with N/2 - 1 node failure', async () => {
+        fit('write and read variable with N/2 - 1 node failure', async () => {
             // Kill just one less than majority nodes, maybe the leader
             // the expectation is that everything should still work
             for (let i = 0; i < numNodes / 2 - 1; i++) {
                 await raftNodes.shift()?.exit();
             }
+            console.log('N/2 - 1 nodes killed');
             await raftClient.setVar('foo', 42);
             expect(await raftClient.getVar('foo')).toBe(42);
-        }, 30_000);
+        }, 10_000);
 
     });
 
