@@ -24,7 +24,7 @@ interface RaftClientApi {
     setVar(key: string, value: number): Promise<void>;
 }
 
-const REQUEST_TIMEOUT_MS = 300;
+const REQUEST_TIMEOUT_MS = 500;
 
 /** Communicates directly with a single node.
  * If the node is not the leader, certain actions may fail. */
