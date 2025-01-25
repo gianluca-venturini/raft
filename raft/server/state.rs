@@ -124,14 +124,15 @@ impl State {
         &self.persisted.log
     }
 
-    pub fn set_current_term(&mut self, term: u32) {
+    pub fn set_current_term(&mut self, term: u32) -> u32 {
         self.persisted.current_term = term;
         if let Err(e) = self.atomic_write_to_file(CURRENT_TERM_FILE, &term.to_le_bytes()) {
             eprintln!("Failed to persist current_term: {}", e);
         }
+        return self.persisted.current_term;
     }
 
-    pub fn set_voted_for(&mut self, node_id: Option<String>) {
+    pub fn set_voted_for(&mut self, node_id: Option<String>) -> Option<String> {
         self.persisted.voted_for = node_id.clone();
         let bytes = if let Some(id) = &node_id {
             id.as_bytes().to_vec()
@@ -141,6 +142,7 @@ impl State {
         if let Err(e) = self.atomic_write_to_file(VOTED_FOR_FILE, &bytes) {
             eprintln!("Failed to persist voted_for: {}", e);
         }
+        return self.persisted.voted_for.clone();
     }
 
     pub fn append_log_entry(&mut self, entry: LogEntry) {

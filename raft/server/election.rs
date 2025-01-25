@@ -43,17 +43,20 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
 
     println!("Attempting election");
 
-    let (node_ids, node_id, current_term) = {
-        let mut s = state.write().await;
-        let node_id = s.node_id.clone();
+    let mut s = state.write().await;
+    let node_id = s.node_id.clone();
+    let last_log_index = s.get_log().len() as u32;
+    let last_log_term = s.get_log().last().map_or(0, |entry| entry.term);
+    let node_ids = s.node_ids.clone();
+    let mut current_term = s.get_current_term();
 
-        s.set_voted_for(Some(node_id.to_string()));
-        let current_term = s.get_current_term();
-        s.set_current_term(current_term + 1);
-        s.role = state::Role::Candidate;
+    s.set_voted_for(Some(node_id.to_string()));
+    current_term = s.set_current_term(current_term + 1);
 
-        (s.node_ids.clone(), node_id, s.get_current_term())
-    };
+    s.role = state::Role::Candidate;
+
+    drop(s);
+
     let max_term = Arc::new(Mutex::new(0)); // Max term seen in responses
     let votes = Arc::new(Mutex::new(1)); // Vote for self
 
@@ -67,7 +70,14 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
             let max_term = Arc::clone(&max_term);
             let candidate_id = node_id.clone();
             tokio::spawn(async move {
-                let result = request_vote(&id, current_term, &candidate_id).await;
+                let result = request_vote(
+                    &id,
+                    current_term,
+                    last_log_index,
+                    last_log_term,
+                    &candidate_id,
+                )
+                .await;
                 if let Err(e) = result {
                     println!("Error requesting vote from node {}: {}", id, e);
                     // Not a big deal, will attempt to be elected from majority of nodes
@@ -135,15 +145,16 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
 async fn request_vote(
     dst_id: &str,
     term: u32,
+    last_log_index: u32,
+    last_log_term: u32,
     id: &str,
 ) -> Result<(bool, u32), Box<dyn std::error::Error>> {
     let mut client = RaftClient::connect(calculate_rpc_server_dst(dst_id)).await?;
     let request = tonic::Request::new(RequestVoteRequest {
         term,
         candidate_id: id.to_string(),
-        // TODO: set these two fields correctly
-        last_log_index: 1,
-        last_log_term: 1,
+        last_log_index,
+        last_log_term,
     });
 
     let response = client.request_vote(request).await?;
