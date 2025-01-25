@@ -84,6 +84,8 @@ impl Raft for MyRaft {
             &mut s,
             request.get_ref().term,
             &request.get_ref().candidate_id,
+            request.get_ref().last_log_index,
+            request.get_ref().last_log_term,
         );
 
         let reply = raft::RequestVoteResponse { term, vote_granted };
@@ -176,6 +178,8 @@ fn calculate_vote(
     state: &mut state::State,
     candidate_term: u32,
     candidate_id: &str,
+    last_log_index: u32,
+    last_log_term: u32,
 ) -> (u32, bool) {
     if candidate_term < state.get_current_term() {
         println!("Vote not granted: candidate term is not up to date");
@@ -190,7 +194,18 @@ fn calculate_vote(
         return (candidate_term, false);
     }
 
-    // TODO: check lastLogTerm and lastLogIndex before granting vote
+    if last_log_index > 0 && last_log_index < state.get_log().len() as u32 {
+        println!("Vote not granted: candidate log is shorter than current node's");
+        return (candidate_term, false);
+    }
+
+    if last_log_index > 0
+        && state.get_log().len() as u32 == last_log_index
+        && last_log_term < state.get_log().last().unwrap().term
+    {
+        println!("Vote not granted: candidate log last term is lower than current node's");
+        return (candidate_term, false);
+    }
 
     println!("Vote granted");
     state.set_voted_for(Some(candidate_id.to_string()));
@@ -461,7 +476,7 @@ mod test {
             let mut state = state::State::default();
             state.set_current_term(0);
 
-            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1", 100, 100);
 
             assert!(vote_granted);
             assert_eq!(term, 1);
@@ -474,7 +489,7 @@ mod test {
             let mut state = state::State::default();
             state.set_current_term(2);
 
-            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1", 100, 100);
 
             assert!(!vote_granted);
             assert_eq!(term, 2);
@@ -488,11 +503,195 @@ mod test {
             state.set_current_term(1);
             state.set_voted_for(Some("candidate1".to_string()));
 
-            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate2");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate2", 100, 100);
 
             assert!(!vote_granted);
             assert_eq!(term, 1);
             assert_eq!(state.get_current_term(), 1);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
+
+        #[test]
+        fn deny_log_shorter() {
+            let mut state = state::State::default();
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "x".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "y".to_string(),
+                    value: 2,
+                },
+            });
+
+            let (term, vote_granted) = calculate_vote(
+                &mut state,
+                42,
+                "candidate1",
+                // Last log index is 1, that is shorter than the current node's log length
+                1,
+                1,
+            );
+
+            assert!(!vote_granted);
+            assert_eq!(term, 42);
+            assert_eq!(state.get_current_term(), 0);
+            assert_eq!(state.get_voted_for(), None);
+        }
+
+        #[test]
+        fn grant_log_same_size() {
+            let mut state = state::State::default();
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "x".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "y".to_string(),
+                    value: 2,
+                },
+            });
+
+            let (term, vote_granted) = calculate_vote(
+                &mut state,
+                42,
+                "candidate1",
+                // Last log index is 1, that is shorter than the current node's log length
+                2,
+                1,
+            );
+
+            assert!(vote_granted);
+            assert_eq!(term, 42);
+            assert_eq!(state.get_current_term(), 42);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
+
+        #[test]
+        fn grant_log_longer() {
+            let mut state = state::State::default();
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "x".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "y".to_string(),
+                    value: 2,
+                },
+            });
+
+            let (term, vote_granted) = calculate_vote(
+                &mut state,
+                42,
+                "candidate1",
+                // Last log index is 1, that is shorter than the current node's log length
+                3,
+                1,
+            );
+
+            assert!(vote_granted);
+            assert_eq!(term, 42);
+            assert_eq!(state.get_current_term(), 42);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
+
+        #[test]
+        fn deny_log_last_term_lower() {
+            let mut state = state::State::default();
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "x".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(state::LogEntry {
+                term: 2,
+                command: state::Command::WriteVar {
+                    name: "y".to_string(),
+                    value: 2,
+                },
+            });
+
+            let (term, vote_granted) = calculate_vote(
+                &mut state,
+                42,
+                "candidate1",
+                2,
+                // Last log term is 1, that is lower than the current node's
+                1,
+            );
+
+            assert!(!vote_granted);
+            assert_eq!(term, 42);
+            assert_eq!(state.get_current_term(), 0);
+            assert_eq!(state.get_voted_for(), None);
+        }
+
+        #[test]
+        fn grant_log_last_term_same() {
+            let mut state = state::State::default();
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "x".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(state::LogEntry {
+                term: 2,
+                command: state::Command::WriteVar {
+                    name: "y".to_string(),
+                    value: 2,
+                },
+            });
+
+            let (term, vote_granted) = calculate_vote(&mut state, 42, "candidate1", 2, 2);
+
+            assert!(vote_granted);
+            assert_eq!(term, 42);
+            assert_eq!(state.get_current_term(), 42);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
+
+        #[test]
+        fn grant_log_last_term_higher() {
+            let mut state = state::State::default();
+            state.append_log_entry(state::LogEntry {
+                term: 1,
+                command: state::Command::WriteVar {
+                    name: "x".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(state::LogEntry {
+                term: 2,
+                command: state::Command::WriteVar {
+                    name: "y".to_string(),
+                    value: 2,
+                },
+            });
+
+            let (term, vote_granted) = calculate_vote(&mut state, 42, "candidate1", 2, 3);
+
+            assert!(vote_granted);
+            assert_eq!(term, 42);
+            assert_eq!(state.get_current_term(), 42);
             assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
         }
 
@@ -502,7 +701,7 @@ mod test {
             state.set_current_term(1);
             state.set_voted_for(Some("candidate1".to_string()));
 
-            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1", 100, 100);
 
             assert!(vote_granted);
             assert_eq!(term, 1);
@@ -516,7 +715,7 @@ mod test {
             state.set_current_term(1);
             state.set_voted_for(Some("candidate1".to_string()));
 
-            let (term, vote_granted) = calculate_vote(&mut state, 2, "candidate2");
+            let (term, vote_granted) = calculate_vote(&mut state, 2, "candidate2", 100, 100);
 
             assert!(vote_granted);
             assert_eq!(term, 2);
