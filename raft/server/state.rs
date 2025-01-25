@@ -211,13 +211,23 @@ impl State {
 
         // Load log
         if let Ok(bytes) = self.read_from_file(LOG_FILE) {
-            match bincode::deserialize(&bytes) {
-                Ok(log) => {
-                    self.persisted.log = log;
-                    println!("Loaded log: {:?}", self.persisted.log);
-                }
-                Err(e) => {
-                    eprintln!("Failed to deserialize log file: {}", e);
+            if bytes.is_empty() {
+                println!("No existing log file found, starting with empty log");
+            } else {
+                match bincode::deserialize(&bytes) {
+                    Ok(log) => {
+                        self.persisted.log = log;
+                        println!("Loaded log: {:?}", self.persisted.log);
+                    }
+                    Err(e) => {
+                        // This is a serious error that indicates data corruption
+                        // TODO: handle this simply leaving the log empty
+                        // and reset completely the state deleting all the other files
+                        panic!(
+                            "Failed to deserialize log file (possible corruption): {}",
+                            e
+                        );
+                    }
                 }
             }
         }

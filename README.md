@@ -36,6 +36,7 @@ yarn test-integration
 - [x] Depose leader when AppendEntries returns a higer term
 - [ ] Clean up the persisted state on disk after every integration test
 - [ ] Every client operation should have a unique ID and be idempotent, so it can be retried if it fails
+- [ ] If log is detected corrupted, reset the state and start with an empty log
 
 # Learnings
 - Raft protocol implementation
