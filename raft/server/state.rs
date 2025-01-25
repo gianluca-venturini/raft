@@ -275,8 +275,9 @@ pub fn init_leader_state(state: &mut State) {
         state.node_ids.iter().map(|id| (id.clone(), 0)).collect();
 }
 
+#[cfg(test)]
 mod test_init_state {
-    use super::*;
+    use crate::state::*;
 
     #[test]
     fn test_init_state_empty() {

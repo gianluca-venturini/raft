@@ -451,75 +451,77 @@ mod test_maybe_append_entries {
 }
 
 #[cfg(test)]
-mod test_calculate_vote {
-    use super::calculate_vote;
-    use crate::state;
+mod test {
+    mod test_calculate_vote {
+        use crate::rpc_server::calculate_vote;
+        use crate::state;
 
-    #[test]
-    fn first_vote() {
-        let mut state = state::State::default();
-        state.set_current_term(0);
+        #[test]
+        fn first_vote() {
+            let mut state = state::State::default();
+            state.set_current_term(0);
 
-        let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
 
-        assert!(vote_granted);
-        assert_eq!(term, 1);
-        assert_eq!(state.get_current_term(), 1);
-        assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
-    }
+            assert!(vote_granted);
+            assert_eq!(term, 1);
+            assert_eq!(state.get_current_term(), 1);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
 
-    #[test]
-    fn deny_old_term() {
-        let mut state = state::State::default();
-        state.set_current_term(2);
+        #[test]
+        fn deny_old_term() {
+            let mut state = state::State::default();
+            state.set_current_term(2);
 
-        let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
 
-        assert!(!vote_granted);
-        assert_eq!(term, 2);
-        assert_eq!(state.get_current_term(), 2);
-        assert_eq!(state.get_voted_for(), None);
-    }
+            assert!(!vote_granted);
+            assert_eq!(term, 2);
+            assert_eq!(state.get_current_term(), 2);
+            assert_eq!(state.get_voted_for(), None);
+        }
 
-    #[test]
-    fn deny_already_voted() {
-        let mut state = state::State::default();
-        state.set_current_term(1);
-        state.set_voted_for(Some("candidate1".to_string()));
+        #[test]
+        fn deny_already_voted() {
+            let mut state = state::State::default();
+            state.set_current_term(1);
+            state.set_voted_for(Some("candidate1".to_string()));
 
-        let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate2");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate2");
 
-        assert!(!vote_granted);
-        assert_eq!(term, 1);
-        assert_eq!(state.get_current_term(), 1);
-        assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
-    }
+            assert!(!vote_granted);
+            assert_eq!(term, 1);
+            assert_eq!(state.get_current_term(), 1);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
 
-    #[test]
-    fn grant_same_candidate() {
-        let mut state = state::State::default();
-        state.set_current_term(1);
-        state.set_voted_for(Some("candidate1".to_string()));
+        #[test]
+        fn grant_same_candidate() {
+            let mut state = state::State::default();
+            state.set_current_term(1);
+            state.set_voted_for(Some("candidate1".to_string()));
 
-        let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
+            let (term, vote_granted) = calculate_vote(&mut state, 1, "candidate1");
 
-        assert!(vote_granted);
-        assert_eq!(term, 1);
-        assert_eq!(state.get_current_term(), 1);
-        assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
-    }
+            assert!(vote_granted);
+            assert_eq!(term, 1);
+            assert_eq!(state.get_current_term(), 1);
+            assert_eq!(state.get_voted_for(), Some("candidate1".to_string()));
+        }
 
-    #[test]
-    fn grant_new_term() {
-        let mut state = state::State::default();
-        state.set_current_term(1);
-        state.set_voted_for(Some("candidate1".to_string()));
+        #[test]
+        fn grant_new_term() {
+            let mut state = state::State::default();
+            state.set_current_term(1);
+            state.set_voted_for(Some("candidate1".to_string()));
 
-        let (term, vote_granted) = calculate_vote(&mut state, 2, "candidate2");
+            let (term, vote_granted) = calculate_vote(&mut state, 2, "candidate2");
 
-        assert!(vote_granted);
-        assert_eq!(term, 2);
-        assert_eq!(state.get_current_term(), 2);
-        assert_eq!(state.get_voted_for(), Some("candidate2".to_string()));
+            assert!(vote_granted);
+            assert_eq!(term, 2);
+            assert_eq!(state.get_current_term(), 2);
+            assert_eq!(state.get_voted_for(), Some("candidate2".to_string()));
+        }
     }
 }
