@@ -17,6 +17,7 @@ interface RaftNodeState {
         | { type: 'DeleteVar'; name: string }
         | { type: 'Noop' };
     }[];
+    variables: { [key: string]: number };
 }
 
 interface RaftClientApi {

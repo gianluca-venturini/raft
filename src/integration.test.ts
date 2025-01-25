@@ -1,5 +1,5 @@
 
-import { fromPairs, times } from 'lodash';
+import { fromPairs, isEqual, times } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
@@ -194,6 +194,62 @@ function integrationTests(numNodes: number) {
             expect(await raftClient.getVar('foo')).toBe(42);
         }, 20_000);
 
+        it('multiple writes are eventually present in the state machine of all nodes', async () => {
+            await raftClient.setVar('foo', 42);
+            await raftClient.setVar('bar', 43);
+            await raftClient.setVar('baz', 44);
+            await checkOnAllNodes(raftNodes, async raftNode =>
+                isEqual((await raftNode.api.getState()).variables, {
+                    foo: 42,
+                    bar: 43,
+                    baz: 44,
+                })
+            );
+        });
+
+        it('operations are linearizable', async () => {
+            await raftClient.setVar('foo', 42);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            await raftClient.setVar('bar', 43);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            expect(await raftClient.getVar('bar')).toBe(43);
+            await raftClient.setVar('baz', 44);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            expect(await raftClient.getVar('bar')).toBe(43);
+            expect(await raftClient.getVar('baz')).toBe(44);
+            await raftClient.setVar('foo', 45);
+            expect(await raftClient.getVar('foo')).toBe(45);
+            expect(await raftClient.getVar('bar')).toBe(43);
+            expect(await raftClient.getVar('baz')).toBe(44);
+            await raftClient.setVar('bar', 46);
+            expect(await raftClient.getVar('foo')).toBe(45);
+            expect(await raftClient.getVar('bar')).toBe(46);
+            expect(await raftClient.getVar('baz')).toBe(44);
+            await raftClient.setVar('baz', 47);
+            expect(await raftClient.getVar('foo')).toBe(45);
+            expect(await raftClient.getVar('bar')).toBe(46);
+            expect(await raftClient.getVar('baz')).toBe(47);
+        });
+
+        it('operations are linearizable with failures', async () => {
+            await raftClient.setVar('foo', 42);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            await raftClient.setVar('bar', 43);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            expect(await raftClient.getVar('bar')).toBe(43);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            await raftClient.setVar('baz', 44);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            expect(await raftClient.getVar('foo')).toBe(42);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            expect(await raftClient.getVar('bar')).toBe(43);
+            await restartLeaderNode(execId, numNodes, raftNodes);
+            expect(await raftClient.getVar('baz')).toBe(44);
+        });
     });
 
     describe('log replication', () => {
@@ -225,6 +281,17 @@ async function getLeaderNode(raftNodes: RaftNodeProcesses[]): Promise<RaftNodePr
         }
         throw new RetryError();
     });
+}
+
+async function restartLeaderNode(execId: string, numNodes: number, raftNodes: RaftNodeProcesses[]): Promise<void> {
+    const leaderNode = await getLeaderNode(raftNodes);
+    if (leaderNode) {
+        await leaderNode.exit();
+        // Restart the node that we just terminated
+        const newNode = startRaftNode(execId, leaderNode.id, numNodes);
+        // Replace the leader with the new node
+        raftNodes[leaderNode.id] = newNode;
+    }
 }
 
 async function checkOnAllNodes(raftNodes: RaftNodeProcesses[], check: (node: RaftNodeProcesses) => Promise<boolean>): Promise<boolean> {

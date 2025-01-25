@@ -113,6 +113,7 @@ async fn get_state(state: web::Data<Arc<AsyncRwLock<state::State>>>) -> HttpResp
     let response = json!({
         "role": s.role,
         "log": formatted_log,
+        "variables": s.state_machine.vars,
     });
     HttpResponse::Ok().json(response)
 }
