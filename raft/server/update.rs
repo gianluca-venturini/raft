@@ -204,20 +204,46 @@ pub async fn update_leader_state(
 ) {
     if !response.success {
         if response.term > state.get_current_term() {
+            // Current leader is deposed
             state.role = state::Role::Follower;
             state.set_current_term(response.term);
             state.volatile_leader = None;
-        }
-        // TODO: implement all the other cases
-    }
-    if response.success {
-        if let Some(leader_state) = &mut state.volatile_leader {
-            leader_state.match_index.insert(
+        } else {
+            // The follower has rejected because it's missing the previous log entry
+            // or the log entry is not at the expected term
+            // we need to decrement the next index in order to find a previous log entry
+            // that the follower has
+            let next_index = *state
+                .volatile_leader
+                .as_mut()
+                .unwrap()
+                .next_index
+                .get(dst_id)
+                .unwrap();
+            state.volatile_leader.as_mut().unwrap().next_index.insert(
                 dst_id.to_string(),
-                request.prev_log_index + request.entries.len() as u32,
+                next_index.saturating_sub(1), // Use saturating_sub to prevent underflow
             );
         }
-        // TODO: implement all the other cases
+    }
+    if response.success {
+        match &mut state.volatile_leader {
+            Some(leader_state) => {
+                leader_state.match_index.insert(
+                    dst_id.to_string(),
+                    request.prev_log_index + request.entries.len() as u32,
+                );
+                leader_state.next_index.insert(
+                    dst_id.to_string(),
+                    request.prev_log_index + request.entries.len() as u32 + 1,
+                );
+            }
+            None => {
+                // This can happen in a race when the leader is deposed
+                // as consequence of a different node update
+                eprintln!("update_leader_state called on a non-leader node");
+            }
+        }
     }
 }
 
@@ -228,7 +254,7 @@ mod test_update_leader_state {
     use super::*;
 
     #[tokio::test]
-    async fn deposed() {
+    async fn failure_deposed() {
         let mut state = state::init_state(3, "0", None);
         init_leader_state(&mut state);
         state.role = state::Role::Leader;
@@ -285,6 +311,11 @@ mod test_update_leader_state {
             // Before the update the leader believes node 2 has no log entries
             Some(&0)
         );
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().next_index.get("2"),
+            // Before the update the leader believes node 2 has no log entries
+            Some(&1)
+        );
 
         update_leader_state(&"2", &mut state, &request, &response).await;
 
@@ -294,6 +325,74 @@ mod test_update_leader_state {
             state.volatile_leader.as_ref().unwrap().match_index.get("2"),
             // After the update the leader believes node 2 has one log entry
             Some(&1)
+        );
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().next_index.get("2"),
+            // After the update the leader believes node 2 has one log entry
+            Some(&2)
+        );
+    }
+
+    #[tokio::test]
+    async fn failure_prev_entry_not_accepted() {
+        let mut state = state::init_state(3, "0", None);
+        init_leader_state(&mut state);
+        state.role = state::Role::Leader;
+        state.set_current_term(1);
+        state
+            .volatile_leader
+            .as_mut()
+            .unwrap()
+            .next_index
+            .insert("2".to_string(), 6);
+        state
+            .volatile_leader
+            .as_mut()
+            .unwrap()
+            .match_index
+            .insert("2".to_string(), 0);
+
+        let response = raft::AppendEntriesResponse {
+            term: 1,
+            success: false,
+        };
+
+        let request = tonic::Request::new(AppendEntriesRequest {
+            term: 0,
+            leader_id: "0".to_string(),
+            prev_log_index: 5,
+            prev_log_term: 1,
+            entries: vec![raft::LogEntry {
+                term: 1,
+                command: Some(raft::log_entry::Command::Noop(raft::Noop {})),
+            }],
+            leader_commit: 0,
+        });
+        let request = request.get_ref();
+
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().match_index.get("2"),
+            Some(&0)
+        );
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().next_index.get("2"),
+            // Before the update the leader believes node 2 has 5 log entries
+            Some(&6)
+        );
+
+        update_leader_state(&"2", &mut state, &request, &response).await;
+
+        assert_eq!(state.role, state::Role::Leader);
+        assert_eq!(state.get_current_term(), 1);
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().match_index.get("2"),
+            // No change
+            Some(&0)
+        );
+        assert_eq!(
+            state.volatile_leader.as_ref().unwrap().next_index.get("2"),
+            // Decrement the next index by one
+            Some(&5)
         );
     }
 }

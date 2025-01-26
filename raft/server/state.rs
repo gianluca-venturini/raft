@@ -42,7 +42,9 @@ pub struct VolatileState {
 
 #[derive(Default)]
 pub struct VolatileLeaderState {
+    /** for each server, index of the next log entry to send to that server */
     pub next_index: HashMap<String, u32>,
+    /** for each server, index of the highest log entry known to be replicated on that server */
     pub match_index: HashMap<String, u32>,
 }
 
@@ -278,76 +280,133 @@ pub fn init_leader_state(state: &mut State) {
 
 #[cfg(test)]
 mod test_init_state {
-    use crate::state::*;
 
-    #[test]
-    fn test_init_state_empty() {
-        let state = init_state(0, "0", None);
-        assert_eq!(state.get_current_term(), 0);
-        assert_eq!(state.volatile.commit_index, 0);
-        assert_eq!(state.volatile.last_applied, 0);
-        assert_eq!(state.state_machine.vars.len(), 0);
-        assert_eq!(state.node_ids.len(), 0);
-        assert_eq!(state.role, Role::Follower);
-        assert_eq!(state.node_id, "0");
+    mod test_init_state {
+        use crate::state::*;
+
+        #[test]
+        fn test_init_state_empty() {
+            let state = init_state(0, "0", None);
+            assert_eq!(state.get_current_term(), 0);
+            assert_eq!(state.volatile.commit_index, 0);
+            assert_eq!(state.volatile.last_applied, 0);
+            assert_eq!(state.state_machine.vars.len(), 0);
+            assert_eq!(state.node_ids.len(), 0);
+            assert_eq!(state.role, Role::Follower);
+            assert_eq!(state.node_id, "0");
+        }
+
+        #[test]
+        fn test_init_node_ids() {
+            let state = init_state(3, "0", None);
+            assert_eq!(state.node_ids.len(), 3);
+            assert_eq!(state.node_ids[0], "0");
+            assert_eq!(state.node_ids[1], "1");
+            assert_eq!(state.node_ids[2], "2");
+            assert_eq!(state.node_id, "0");
+        }
     }
 
-    #[test]
-    fn test_init_node_ids() {
-        let state = init_state(3, "0", None);
-        assert_eq!(state.node_ids.len(), 3);
-        assert_eq!(state.node_ids[0], "0");
-        assert_eq!(state.node_ids[1], "1");
-        assert_eq!(state.node_ids[2], "2");
-        assert_eq!(state.node_id, "0");
+    mod test_init_leader_state {
+        use crate::state::*;
+
+        #[test]
+        fn test_init_leader_state() {
+            let mut state = init_state(3, "0", None);
+            state.append_log_entry(LogEntry {
+                term: 1,
+                command: Command::Noop,
+            });
+            state.append_log_entry(LogEntry {
+                term: 1,
+                command: Command::Noop,
+            });
+            init_leader_state(&mut state);
+            assert_eq!(state.role, Role::Leader);
+            assert_eq!(state.volatile_leader.is_some(), true);
+            assert_eq!(state.volatile_leader.as_ref().unwrap().next_index.len(), 3);
+            assert_eq!(state.volatile_leader.as_ref().unwrap().match_index.len(), 3);
+            assert_eq!(
+                state.volatile_leader.as_ref().unwrap().next_index.get("0"),
+                Some(&3)
+            );
+            assert_eq!(
+                state.volatile_leader.as_ref().unwrap().match_index.get("0"),
+                Some(&0)
+            );
+            assert_eq!(
+                state.volatile_leader.as_ref().unwrap().next_index.get("1"),
+                Some(&3)
+            );
+            assert_eq!(
+                state.volatile_leader.as_ref().unwrap().match_index.get("1"),
+                Some(&0)
+            );
+            assert_eq!(
+                state.volatile_leader.as_ref().unwrap().next_index.get("2"),
+                Some(&3)
+            );
+            assert_eq!(
+                state.volatile_leader.as_ref().unwrap().match_index.get("2"),
+                Some(&0)
+            );
+        }
     }
 
-    #[test]
-    fn test_apply_committed_write() {
-        let mut state = init_state(1, "0", None);
-        state.append_log_entry(LogEntry {
-            term: 1,
-            command: Command::WriteVar {
-                name: "a".to_string(),
-                value: 1,
-            },
-        });
-        state.volatile.commit_index = 1;
+    mod test_apply_committed {
+        use crate::state::*;
 
-        assert_eq!(state.volatile.last_applied, 0);
+        #[test]
+        fn test_apply_committed_write() {
+            let mut state = init_state(1, "0", None);
+            state.append_log_entry(LogEntry {
+                term: 1,
+                command: Command::WriteVar {
+                    name: "a".to_string(),
+                    value: 1,
+                },
+            });
+            state.volatile.commit_index = 1;
 
-        state.apply_committed();
+            assert_eq!(state.volatile.last_applied, 0);
 
-        assert_eq!(state.volatile.last_applied, 1);
-        assert_eq!(state.state_machine.vars.get("a"), Some(&1));
+            state.apply_committed();
+
+            assert_eq!(state.volatile.last_applied, 1);
+            assert_eq!(state.state_machine.vars.get("a"), Some(&1));
+        }
     }
 
-    #[test]
-    fn test_override_committed_write() {
-        let mut state = init_state(1, "0", None);
-        state.append_log_entry(LogEntry {
-            term: 1,
-            command: Command::WriteVar {
-                name: "a".to_string(),
-                value: 1,
-            },
-        });
-        state.append_log_entry(LogEntry {
-            term: 1,
-            command: Command::WriteVar {
-                name: "a".to_string(),
-                value: 2,
-            },
-        });
+    mod test_append_log_entry {
+        use crate::state::*;
 
-        state.volatile.commit_index = 1;
-        state.apply_committed();
-        assert_eq!(state.volatile.last_applied, 1);
-        assert_eq!(state.state_machine.vars.get("a"), Some(&1));
+        #[test]
+        fn test_override_committed_write() {
+            let mut state = init_state(1, "0", None);
+            state.append_log_entry(LogEntry {
+                term: 1,
+                command: Command::WriteVar {
+                    name: "a".to_string(),
+                    value: 1,
+                },
+            });
+            state.append_log_entry(LogEntry {
+                term: 1,
+                command: Command::WriteVar {
+                    name: "a".to_string(),
+                    value: 2,
+                },
+            });
 
-        state.volatile.commit_index = 2;
-        state.apply_committed();
-        assert_eq!(state.volatile.last_applied, 2);
-        assert_eq!(state.state_machine.vars.get("a"), Some(&2));
+            state.volatile.commit_index = 1;
+            state.apply_committed();
+            assert_eq!(state.volatile.last_applied, 1);
+            assert_eq!(state.state_machine.vars.get("a"), Some(&1));
+
+            state.volatile.commit_index = 2;
+            state.apply_committed();
+            assert_eq!(state.volatile.last_applied, 2);
+            assert_eq!(state.state_machine.vars.get("a"), Some(&2));
+        }
     }
 }
