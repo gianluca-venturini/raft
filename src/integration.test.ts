@@ -1,7 +1,8 @@
 
+import fs from 'fs';
+
 import { fromPairs, isEqual, times } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
-
 import { RaftNodeProcesses, startRaftNode } from './testUtil';
 import { NotFoundError, RaftClient } from './api';
 
@@ -270,7 +271,7 @@ function integrationTests(numNodes: number) {
             });
         });
 
-        it('the leader propagates all the log entries to all nodes', async () => {
+        it('the leader propagates many log entries to all nodes', async () => {
             const numEntries = 1000;
             for (let i = 0; i < numEntries; i++) {
                 await raftClient.setVar(`foo-${i}`, i);
@@ -280,6 +281,36 @@ function integrationTests(numNodes: number) {
                 const state = await node.api.getState();
                 // numEntries + 1 because the leader has a Noop entry in the log at the beginning of the term
                 return state.log.length === numEntries + 1;
+            });
+        });
+
+        it('the leader propagates log entries to a node with catastrophic failure', async () => {
+            const numEntries = 20;
+            let i = 0;
+            while (i < numEntries / 2) {
+                await raftClient.setVar(`foo-${i}`, i);
+                i++;
+            }
+
+            const followerNode = await getFollowerNode(raftNodes);
+            if (!followerNode) {
+                throw new Error('No follower found');
+            }
+            // Restart the follower node and delete the persisted storage to simulate a catastrophic failure
+            await restartNode(followerNode, execId, numNodes, raftNodes, true);
+            console.log(`follower node restarted ${followerNode.id}`);
+
+            while (i < numEntries) {
+                await raftClient.setVar(`foo-${i}`, i);
+                i++;
+            }
+
+            await doWithRetry(async () => {
+                const state = await followerNode.api.getState();
+                // numEntries + 1 because the leader has a Noop entry in the log at the beginning of the term
+                if (state.log.length !== numEntries + 1) {
+                    throw new RetryError();
+                }
             });
         });
     });
@@ -296,15 +327,35 @@ async function getLeaderNode(raftNodes: RaftNodeProcesses[]): Promise<RaftNodePr
     });
 }
 
+async function getFollowerNode(raftNodes: RaftNodeProcesses[]): Promise<RaftNodeProcesses | undefined> {
+    return doWithRetry(async () => {
+        for (const node of raftNodes) {
+            if ((await node.api.getState()).role === 'Follower') {
+                return node;
+            }
+        }
+        throw new RetryError();
+    });
+}
+
 async function restartLeaderNode(execId: string, numNodes: number, raftNodes: RaftNodeProcesses[]): Promise<void> {
     const leaderNode = await getLeaderNode(raftNodes);
-    if (leaderNode) {
-        await leaderNode.exit();
-        // Restart the node that we just terminated
-        const newNode = startRaftNode(execId, leaderNode.id, numNodes);
-        // Replace the leader with the new node
-        raftNodes[leaderNode.id] = newNode;
+    if (!leaderNode) {
+        throw new Error('No leader found');
     }
+    await restartNode(leaderNode, execId, numNodes, raftNodes);
+}
+
+async function restartNode(node: RaftNodeProcesses, execId: string, numNodes: number, raftNodes: RaftNodeProcesses[], deletePesistedStorage: boolean = false): Promise<void> {
+    await node.exit();
+    if (deletePesistedStorage) {
+        await fs.rmdirSync(node.storagePath, { recursive: true });
+    }
+    // Restart the node that we just terminated
+    const newNode = startRaftNode(execId, node.id, numNodes);
+    await newNode.started;
+    // Replace the leader with the new node
+    raftNodes[node.id] = newNode;
 }
 
 async function checkOnAllNodes(raftNodes: RaftNodeProcesses[], check: (node: RaftNodeProcesses) => Promise<boolean>): Promise<boolean> {
