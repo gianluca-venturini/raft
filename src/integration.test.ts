@@ -9,7 +9,7 @@ describe('integration 3 nodes', () => {
     integrationTests(3);
 });
 
-xdescribe('integration 5 nodes', () => {
+describe('integration 5 nodes', () => {
     integrationTests(5);
 });
 
@@ -270,7 +270,7 @@ function integrationTests(numNodes: number) {
             });
         });
 
-        xit('the leader propagates all the log entries to all nodes', async () => {
+        it('the leader propagates all the log entries to all nodes', async () => {
             const numEntries = 1000;
             for (let i = 0; i < numEntries; i++) {
                 await raftClient.setVar(`foo-${i}`, i);

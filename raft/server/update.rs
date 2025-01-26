@@ -142,16 +142,25 @@ pub async fn send_update_node(
     dst_id: &str,
     state: Arc<AsyncRwLock<state::State>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    // TODO: only send partial log rather than the whole log based on what every node needs
     let s = state.read().await;
     let node_id = s.node_id.clone();
     let term = s.get_current_term();
-    let entries: Vec<raft::LogEntry> = s.get_log().iter().map(convert_log_entry).collect();
+    let start_log_index = s
+        .volatile_leader
+        .as_ref()
+        .unwrap()
+        .next_index
+        .get(dst_id)
+        .unwrap();
+    let entries: Vec<raft::LogEntry> = s
+        .get_log()
+        .iter()
+        .skip(start_log_index.saturating_sub(1) as usize)
+        .map(convert_log_entry)
+        .collect();
 
     // Get the index and term of the entry preceding new ones
-    // let prev_log_index = if s.get_log().is_empty() { 0 } else { (s.get_log().len() - 1) as u32 };
-    // TODO: with partial log this can be larger
-    let prev_log_index = 0;
+    let prev_log_index = start_log_index.saturating_sub(1);
     let prev_log_term = if prev_log_index == 0 {
         0
     } else {
