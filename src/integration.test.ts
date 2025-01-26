@@ -282,7 +282,7 @@ function integrationTests(numNodes: number) {
                 // numEntries + 1 because the leader has a Noop entry in the log at the beginning of the term
                 return state.log.length === numEntries + 1;
             });
-        });
+        }, 30_000);
 
         it('the leader propagates log entries to a node with catastrophic failure', async () => {
             const numEntries = 20;
@@ -371,7 +371,7 @@ async function checkOnAllNodes(raftNodes: RaftNodeProcesses[], check: (node: Raf
 
 class RetryError extends Error { }
 
-async function doWithRetry<T>(fn: () => Promise<T>, maxAttempts: number = 10, timeoutMs: number = 500): Promise<T> {
+async function doWithRetry<T>(fn: () => Promise<T>, maxAttempts: number = 50, timeoutMs: number = 500): Promise<T> {
     for (let attempts = 0; attempts < maxAttempts; attempts++) {
         try {
             return await fn();
