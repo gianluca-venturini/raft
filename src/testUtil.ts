@@ -58,6 +58,7 @@ export function startRaftNode(execId: string, index: number, numNodes: number, n
                 }
                 if (webServerStarted && rpcServerStarted && !considerStarted) {
                     console.log(`server started ${index}`);
+                    considerStarted = true;
                     resolve();
                 }
             });
