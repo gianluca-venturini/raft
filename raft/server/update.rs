@@ -3,7 +3,10 @@ use raft::AppendEntriesRequest;
 use std::sync::Arc;
 use tokio::sync::RwLock as AsyncRwLock;
 
-use crate::{rpc_util::calculate_rpc_server_dst, state};
+use crate::{
+    rpc_util::calculate_rpc_server_dst,
+    state::{self, reset_leader_state},
+};
 
 pub mod raft {
     tonic::include_proto!("raft");
@@ -205,7 +208,7 @@ pub async fn update_leader_state(
     if !response.success {
         if response.term > state.get_current_term() {
             // Current leader is deposed
-            state.role = state::Role::Follower;
+            reset_leader_state(state);
             state.set_current_term(response.term);
             state.volatile_leader = None;
         } else {

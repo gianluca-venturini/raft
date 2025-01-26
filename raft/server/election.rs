@@ -7,6 +7,7 @@ use std::cmp::max;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock as AsyncRwLock;
 
+use crate::state::{init_leader_state, reset_leader_state};
 use crate::update::{send_update_all, WaitFor};
 use crate::{rpc_util::calculate_rpc_server_dst, state, util::get_current_time_ms};
 
@@ -104,7 +105,7 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
         let majority = (s.node_ids.len() as f32 / 2.0).ceil() as u32;
         if *votes.lock().unwrap() >= majority {
             println!("Elected leader with majority votes");
-            s.role = state::Role::Leader;
+            init_leader_state(&mut s);
             let current_term = s.get_current_term();
             // Push Noop as the first term entry to immediately have an entry for this term to
             // communicate to other nodes
@@ -114,19 +115,22 @@ pub async fn maybe_attempt_election(state: Arc<AsyncRwLock<state::State>>) {
             });
             drop(s);
 
-            println!("Sending update to all nodes to enstablish leadership");
+            println!("Sending update to all nodes to consolidate leadership");
             // Retry few times to maximize the chance to reach majority of nodes
+            // do not retry indefinitely and instead revert to follower if not enough nodes respond
+            // to allow some other node to take over
+            // e.g. if this node is in a small network partition there's no point in retrying indefinitely
             let successful_responses = send_update_all(state.clone(), WaitFor::Retries(3)).await;
 
             if successful_responses < majority {
                 println!("Failed to update the majority of nodes");
                 println!("Reverting to follower");
                 let mut s = state.write().await;
-                s.role = state::Role::Follower;
+                reset_leader_state(&mut s);
                 return;
             }
 
-            println!("Update sent to all nodes");
+            println!("Update sent to majority of nodes - leadership consolidated");
         } else {
             println!("Election lost");
             let max_term = max_term.lock().unwrap();

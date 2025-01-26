@@ -265,7 +265,7 @@ pub fn init_state(num_nodes: u16, node_id: &str, storage_path: Option<String>) -
     state
 }
 
-// TODO: initialize leader state when the leader is elected or at startup
+/** Initialize the leader state */
 pub fn init_leader_state(state: &mut State) {
     state.role = Role::Leader;
     state.volatile_leader = Some(VolatileLeaderState::default());
@@ -276,6 +276,12 @@ pub fn init_leader_state(state: &mut State) {
         .collect();
     state.volatile_leader.as_mut().unwrap().match_index =
         state.node_ids.iter().map(|id| (id.clone(), 0)).collect();
+}
+
+/** Depose the current leader and reset the leader state */
+pub fn reset_leader_state(state: &mut State) {
+    state.role = Role::Follower;
+    state.volatile_leader = None;
 }
 
 #[cfg(test)]
