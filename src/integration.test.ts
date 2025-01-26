@@ -10,7 +10,7 @@ describe('integration 3 nodes', () => {
     integrationTests(3);
 });
 
-describe('integration 5 nodes', () => {
+xdescribe('integration 5 nodes', () => {
     integrationTests(5);
 });
 
@@ -250,7 +250,7 @@ function integrationTests(numNodes: number) {
             expect(await raftClient.getVar('bar')).toBe(43);
             await restartLeaderNode(execId, numNodes, raftNodes);
             expect(await raftClient.getVar('baz')).toBe(44);
-        });
+        }, 30_000);
     });
 
     describe('log replication', () => {

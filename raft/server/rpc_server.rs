@@ -1,10 +1,8 @@
 use raft::raft_server::{Raft, RaftServer};
 use raft::{AppendEntriesRequest, AppendEntriesResponse};
 use std::env;
-use std::error::Error as StdError;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock as AsyncRwLock};
-use tonic::transport::Error as TransportError;
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::state;
