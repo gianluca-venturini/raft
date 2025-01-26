@@ -261,12 +261,25 @@ function integrationTests(numNodes: number) {
             expect(leaderNodeState?.log[0]?.command.type).toBe('Noop');
         });
 
-        it('the leader evantually propagates the initial noop to all nodes', async () => {
+        it('the leader propagates the initial noop to all nodes', async () => {
             // wait for leader election
             await getLeaderNode(raftNodes);
             await checkOnAllNodes(raftNodes, async node => {
                 const state = await node.api.getState();
                 return state.log[0]?.command.type === 'Noop';
+            });
+        });
+
+        fit('the leader propagates all the log entries to all nodes', async () => {
+            const numEntries = 1000;
+            for (let i = 0; i < numEntries; i++) {
+                await raftClient.setVar(`foo-${i}`, i);
+            }
+
+            await checkOnAllNodes(raftNodes, async node => {
+                const state = await node.api.getState();
+                // numEntries + 1 because the leader has a Noop entry in the log at the beginning of the term
+                return state.log.length === numEntries + 1;
             });
         });
     });
