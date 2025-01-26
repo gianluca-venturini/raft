@@ -114,6 +114,21 @@ impl State {
         );
     }
 
+    /** Update the commit index to the highest index that has been persisted by the majority of the followers */
+    pub fn update_commit_index(&mut self) {
+        let majority = (self.node_ids.len() as f32 / 2.0).ceil() as u32;
+        if let Some(volatile_leader) = self.volatile_leader.as_mut() {
+            let mut commit_indices: Vec<u32> =
+                volatile_leader.match_index.values().cloned().collect();
+            commit_indices.sort();
+            // Get the index that has been replicated on a majority of servers
+            let majority_index = commit_indices.get(majority as usize - 1);
+            if let Some(new_commit_index) = majority_index {
+                self.volatile.commit_index = *new_commit_index;
+            }
+        }
+    }
+
     pub fn get_current_term(&self) -> u32 {
         self.persisted.current_term
     }
@@ -285,7 +300,7 @@ pub fn reset_leader_state(state: &mut State) {
 }
 
 #[cfg(test)]
-mod test_init_state {
+mod test {
 
     mod test_init_state {
         use crate::state::*;
@@ -413,6 +428,26 @@ mod test_init_state {
             state.apply_committed();
             assert_eq!(state.volatile.last_applied, 2);
             assert_eq!(state.state_machine.vars.get("a"), Some(&2));
+        }
+    }
+
+    mod test_update_commit_index {
+        use crate::state::*;
+
+        #[test]
+        fn test_update_commit_index() {
+            let mut state = init_state(5, "0", None);
+            init_leader_state(&mut state);
+            let match_index = &mut state.volatile_leader.as_mut().unwrap().match_index;
+            match_index.insert("0".to_string(), 7);
+            match_index.insert("1".to_string(), 5);
+            match_index.insert("2".to_string(), 3);
+            match_index.insert("3".to_string(), 13);
+            match_index.insert("4".to_string(), 2);
+
+            assert_eq!(state.volatile.commit_index, 0);
+            state.update_commit_index();
+            assert_eq!(state.volatile.commit_index, 5);
         }
     }
 }

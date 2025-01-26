@@ -37,13 +37,18 @@ pub async fn maybe_send_update_all(state: Arc<AsyncRwLock<state::State>>) {
 }
 
 pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>, wait_for: WaitFor) -> u32 {
-    let s: tokio::sync::RwLockReadGuard<'_, state::State> = state.read().await;
+    let mut s = state.write().await;
     if s.role != state::Role::Leader {
         panic!("Programmer error: send_update_all called on a non-leader node");
     }
     let node_ids = s.node_ids.clone();
     let node_id = s.node_id.clone();
     let majority = (s.node_ids.len() as f32 / 2.0).ceil() as u32;
+    let log_size = s.get_log().len() as u32;
+    if let Some(leader_state) = s.volatile_leader.as_mut() {
+        // Current leader match_index is the last log entry index since it's the leader
+        leader_state.match_index.insert(node_id.clone(), log_size);
+    }
     drop(s);
 
     let node_updates_successfully = Arc::new(tokio::sync::Mutex::new(1u32)); // Count self as successful
@@ -102,29 +107,14 @@ pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>, wait_for: Wa
 
     let successful_responses = *node_updates_successfully.lock().await;
 
-    let s = state.read().await;
-    if successful_responses >= majority {
-        println!("Majority of nodes have accepted the update");
-        // Index of the entry that the leader believe is the latest
-        // and the majority of followers agree
-        let new_commit_index = s.get_log().len() as u32;
-        println!("Updating commit index to {}", new_commit_index);
-        drop(s);
-
-        {
-            let mut s = state.write().await;
-            s.volatile.commit_index = new_commit_index;
-            s.apply_committed();
-        }
-    } else {
-        // It's fine to bail out if WaitFor::Retries, we will retry forever soon-ish
-        // for trying to reach failed nodes
-        println!("Less than majority of nodes have accepted the update");
+    {
+        let mut s = state.write().await;
+        s.update_commit_index();
+        s.apply_committed();
+        // Mark the time the last heartbeat was sent
+        s.last_heartbeat_timestamp_ms = crate::util::get_current_time_ms();
     }
 
-    let mut s = state.write().await;
-    // Mark the time the last heartbeat was sent
-    s.last_heartbeat_timestamp_ms = crate::util::get_current_time_ms();
     return successful_responses;
 }
 
