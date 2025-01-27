@@ -39,7 +39,8 @@ pub async fn maybe_send_update_all(state: Arc<AsyncRwLock<state::State>>) {
 pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>, wait_for: WaitFor) -> u32 {
     let mut s = state.write().await;
     if s.role != state::Role::Leader {
-        panic!("Programmer error: send_update_all called on a non-leader node");
+        // This happens if the leader is deposed
+        return 0;
     }
     let node_ids = s.node_ids.clone();
     let node_id = s.node_id.clone();
@@ -66,14 +67,26 @@ pub async fn send_update_all(state: Arc<AsyncRwLock<state::State>>, wait_for: Wa
                 let mut attempt = 0;
                 loop {
                     match send_update_node(&id, state.clone()).await {
-                        Ok(result) => {
+                        Ok(true) => {
+                            // Success branch - node accepted the update
                             let mut count = node_updates_successfully.lock().await;
                             *count += 1;
+                            println!("Node {} accepted the update", id);
                             println!("{} nodes have accepted the update", count);
-                            return Ok::<bool, ()>(result);
+                            return Ok::<bool, Box<dyn std::error::Error + Send + Sync>>(true);
                         }
-                        Err(e) => {
-                            println!("Error sending update to node {}: {}", id, e);
+                        result @ (Ok(false) | Err(_)) => {
+                            // Combined failure branch - node rejected or error occurred
+                            if let Err(e) = result {
+                                println!("Error sending update to node {}: {}", id, e);
+                            }
+                            let s = state.read().await;
+                            if s.role != state::Role::Leader {
+                                // This happens if the leader is deposed
+                                // stop retrying immediately
+                                return Ok(false);
+                            }
+                            drop(s);
                             attempt += 1;
                             match wait_for {
                                 WaitFor::Majority => {
@@ -143,6 +156,10 @@ pub async fn send_update_node(
     state: Arc<AsyncRwLock<state::State>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let s = state.read().await;
+    if s.role != state::Role::Leader {
+        // This happens if the leader is deposed
+        return Ok(false);
+    }
     let node_id = s.node_id.clone();
     let term = s.get_current_term();
     let start_log_index = s
